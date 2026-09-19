@@ -19,9 +19,12 @@ boxman ec2 connect
 boxman ec2 connect -u myuser
 boxman ec2 run 'uname -a'
 boxman ec2 run -u myuser 'id'
+boxman ec2 setup --user alice
 ```
 
 `status` reports EC2 state and SSM registration. `start` and `stop` wait for the instance state change. `connect -u` starts a session as `ssm-user` and uses `sudo -iu` to enter the chosen account. `run` executes through SSM Run Command as root unless `-u` is supplied; it prints status and output and exits with an error when the remote command fails.
+
+`setup --user USER` is the laptop-side host bootstrap. It uses the Ubuntu image's `ubuntu` account by default only for bootstrap; pass `--bootstrap-user ACCOUNT` for a custom image. `USER` must be a different account. Boxman writes temporary SSH entries, uses EC2 Instance Connect to send a short-lived key for the bootstrap account, copies the local Boxman package to a temporary directory on the host, installs system packages, creates `USER` if needed, configures its subordinate IDs and lingering, then reconnects as `USER` for `boxman user` and `boxman verify`. The bootstrap account must have passwordless sudo. The temporary package directory is removed afterward.
 
 ## SSH and editor access
 
@@ -33,7 +36,7 @@ boxman ec2 --machine red ssh-config -u myuser --herdr
 ssh mybox
 ```
 
-Both SSH commands generate a dedicated local key pair when needed and install the public key in the remote user's `authorized_keys` using SSM. `ssh-config` writes a marked host block to `~/.ssh/config`, so OpenSSH tools and VS Code Remote SSH can use the alias. The alias defaults to the selected machine name; pass `--alias` when you want a different local name. `--herdr` then runs `herdr machine add` for that same alias, which prepares the remote Herdr server and saves the machine locally. You can pass `--key-path PATH` to choose the key pair. Re-run `ssh-config` after an instance replacement.
+Both SSH commands generate a dedicated local key pair when needed. Their ProxyCommand calls EC2 Instance Connect to send the public key for the selected Unix user immediately before opening the tunnel; no persistent `authorized_keys` change is required. `ssh-config` writes a marked host block to `~/.ssh/config`, so OpenSSH tools and VS Code Remote SSH can use the alias. The alias defaults to the selected machine name; pass `--alias` when you want a different local name. `--herdr` then runs `herdr machine add` for that same alias, which prepares the remote Herdr server and saves the machine locally. You can pass `--key-path PATH` to choose the key pair. Re-run `ssh-config` after an instance replacement.
 
 ## More than one box
 

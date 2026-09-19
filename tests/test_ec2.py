@@ -57,6 +57,33 @@ Owner = "someone"
             check=True,
         )
 
+    def test_eic_proxy_sends_key_before_opening_tunnel(self) -> None:
+        with patch.object(ec2.subprocess, "run") as run, patch.object(ec2.os, "execvp") as execvp:
+            ec2.eic_proxy("profile", "region", "i-123", "alice", Path("/tmp/boxman-key"))
+        run.assert_called_once_with(
+            [
+                "aws", "ec2-instance-connect", "send-ssh-public-key",
+                "--profile", "profile", "--region", "region",
+                "--instance-id", "i-123", "--instance-os-user", "alice",
+                "--ssh-public-key", "file:///tmp/boxman-key.pub",
+            ],
+            check=True,
+            stdout=ec2.subprocess.DEVNULL,
+        )
+        execvp.assert_called_once_with(
+            "aws",
+            ["aws", "ec2-instance-connect", "open-tunnel", "--profile", "profile", "--region", "region", "--instance-id", "i-123"],
+        )
+
+    def test_setup_host_creates_user_and_runs_both_setup_steps(self) -> None:
+        with patch.object(ec2, "stage_package", return_value=(Path("/tmp/boxman-setup-x"), "/tmp/boxman-setup-x")), patch.object(ec2, "remote_ssh") as remote:
+            ec2.setup_host("red-bootstrap", "red", "alice")
+        commands = [call.args for call in remote.call_args_list]
+        self.assertIn(("red-bootstrap", "sudo env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli system --packages-only"), commands)
+        self.assertIn(("red-bootstrap", "sudo env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli system alice"), commands)
+        self.assertIn(("red", "env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli user"), commands)
+        self.assertIn(("red", "env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli verify"), commands)
+
 
 if __name__ == "__main__":
     unittest.main()

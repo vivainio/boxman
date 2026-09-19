@@ -12,6 +12,8 @@ import re
 import shlex
 import shutil
 import subprocess
+import tarfile
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -177,6 +179,44 @@ def add_key(ssm, instance: str, user: str, key_path: Path) -> None:
     execute(ssm, instance, script, user)
 
 
+def eic_proxy(profile: str, region: str, instance: str, user: str, key_path: Path) -> None:
+    """Send a short-lived key through EC2 Instance Connect, then relay SSH."""
+    public_key = Path(str(key_path) + ".pub")
+    subprocess.run(
+        [
+            "aws",
+            "ec2-instance-connect",
+            "send-ssh-public-key",
+            "--profile",
+            profile,
+            "--region",
+            region,
+            "--instance-id",
+            instance,
+            "--instance-os-user",
+            user,
+            "--ssh-public-key",
+            f"file://{public_key}",
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    os.execvp(
+        "aws",
+        [
+            "aws",
+            "ec2-instance-connect",
+            "open-tunnel",
+            "--profile",
+            profile,
+            "--region",
+            region,
+            "--instance-id",
+            instance,
+        ],
+    )
+
+
 def keypair(path: Path) -> None:
     if path.exists():
         if not Path(str(path) + ".pub").is_file():
@@ -187,7 +227,24 @@ def keypair(path: Path) -> None:
 
 
 def proxy(settings_: dict) -> str:
-    return " ".join(shlex.quote(part) for part in ("aws", "ec2-instance-connect", "open-tunnel", "--profile", settings_["profile"], "--region", settings_["region"], "--instance-id")) + " %h"
+    return " ".join(
+        shlex.quote(part)
+        for part in (
+            "boxman",
+            "ec2",
+            "--profile",
+            settings_["profile"],
+            "--region",
+            settings_["region"],
+            "proxy",
+            "--instance-id",
+            "%h",
+            "--user",
+            settings_["ssh_user"],
+            "--key-path",
+            str(settings_["key_path"]),
+        )
+    )
 
 
 def write_ssh_config(alias: str, body: str) -> None:
@@ -212,6 +269,49 @@ def register_herdr(alias: str, user: str) -> None:
         ["herdr", "machine", "add", alias, "--label", f"Boxman {alias} ({user})"],
         check=True,
     )
+
+
+def remote_ssh(alias: str, command: str) -> None:
+    subprocess.run(["ssh", "-t", alias, command], check=True)
+
+
+def stage_package(alias: str) -> tuple[Path, str]:
+    """Copy this installed Boxman package to a temporary remote directory."""
+    package_dir = Path(__file__).resolve().parent
+    token = next(tempfile._get_candidate_names())
+    remote_dir = f"/tmp/boxman-setup-{token}"
+    descriptor, archive_name = tempfile.mkstemp(prefix="boxman-setup-", suffix=".tar.gz")
+    os.close(descriptor)
+    archive = Path(archive_name)
+    try:
+        with tarfile.open(archive, "w:gz") as bundle:
+            bundle.add(package_dir, arcname="boxman")
+        remote_ssh(alias, f"mkdir -p {shlex.quote(remote_dir)}")
+        subprocess.run(["scp", str(archive), f"{alias}:{remote_dir}/package.tar.gz"], check=True)
+        remote_ssh(
+            alias,
+            f"tar -xzf {shlex.quote(remote_dir)}/package.tar.gz -C {shlex.quote(remote_dir)}",
+        )
+    finally:
+        archive.unlink(missing_ok=True)
+    return Path(remote_dir), remote_dir
+
+
+def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
+    remote_dir, remote_path = stage_package(bootstrap_alias)
+    python_path = shlex.quote(str(remote_dir))
+    try:
+        remote_ssh(bootstrap_alias, f"sudo env PYTHONPATH={python_path} python3 -m boxman.cli system --packages-only")
+        create_user = (
+            f"if id -u {user} >/dev/null 2>&1; then echo 'user {user} already exists'; "
+            f"else sudo useradd --create-home --shell /bin/bash {user}; fi"
+        )
+        remote_ssh(bootstrap_alias, create_user)
+        remote_ssh(bootstrap_alias, f"sudo env PYTHONPATH={python_path} python3 -m boxman.cli system {user}")
+        remote_ssh(target_alias, f"env PYTHONPATH={python_path} python3 -m boxman.cli user")
+        remote_ssh(target_alias, f"env PYTHONPATH={python_path} python3 -m boxman.cli verify")
+    finally:
+        remote_ssh(bootstrap_alias, f"rm -rf {shlex.quote(remote_path)}")
 
 
 def main(argv: list[str]) -> None:
@@ -240,10 +340,26 @@ def main(argv: list[str]) -> None:
     ssh_config.add_argument("--alias", help="local SSH and Herdr name (default: stack name)")
     ssh_config.add_argument("--key-path", type=Path)
     ssh_config.add_argument("--herdr", action="store_true", help="prepare the remote Herdr server and save this SSH machine")
+    setup = sub.add_parser("setup", help="set up the remote host through SSH")
+    setup.add_argument("-u", "--user", required=True, help="Unix account to create or configure")
+    setup.add_argument("--bootstrap-user", default="ubuntu", help="existing account used for the initial SSH connection (default: ubuntu)")
+    proxy_command = sub.add_parser("proxy", help=argparse.SUPPRESS)
+    proxy_command.add_argument("--instance-id", required=True)
+    proxy_command.add_argument("--user", required=True)
+    proxy_command.add_argument("--key-path", type=Path, required=True)
     run = sub.add_parser("run")
     run.add_argument("command")
     run.add_argument("-u", "--user")
     args = parser.parse_args(argv)
+    if args.action == "proxy":
+        eic_proxy(
+            required(args.profile, "--profile"),
+            required(args.region, "--region"),
+            args.instance_id,
+            username(args.user),
+            args.key_path,
+        )
+        return
     conf = settings(args)
     if args.action == "init":
         values = {key: getattr(args, key) for key in PARAMETERS}
@@ -291,6 +407,28 @@ def main(argv: list[str]) -> None:
             cfn.get_waiter("stack_update_complete" if current else "stack_create_complete").wait(StackName=name)
             print(f"InstanceId: {instance_id(cfn, name)}")
             return
+        if args.action == "setup":
+            instance = instance_id(cfn, name)
+            user = username(args.user)
+            bootstrap_user = username(args.bootstrap_user)
+            if user == bootstrap_user:
+                raise SystemExit("setup USER must be different from --bootstrap-user; the bootstrap account is only for initial access")
+            key = Path.home() / ".ssh" / f"boxman-{conf['machine']}-ed25519"
+            keypair(key)
+            alias = conf["machine"]
+            bootstrap_alias = alias if bootstrap_user == user else f"{alias}-bootstrap"
+            bootstrap_tunnel = proxy({**conf, "ssh_user": bootstrap_user, "key_path": key})
+            write_ssh_config(
+                bootstrap_alias,
+                f"Host {bootstrap_alias}\n    HostName {instance}\n    User {bootstrap_user}\n    IdentityFile {key}\n    ProxyCommand {bootstrap_tunnel}",
+            )
+            target_tunnel = proxy({**conf, "ssh_user": user, "key_path": key})
+            write_ssh_config(
+                alias,
+                f"Host {alias}\n    HostName {instance}\n    User {user}\n    IdentityFile {key}\n    ProxyCommand {target_tunnel}",
+            )
+            setup_host(bootstrap_alias, alias, user)
+            return
         instance = instance_id(cfn, name)
         if args.action == "status":
             ec2 = session.client("ec2")
@@ -313,8 +451,7 @@ def main(argv: list[str]) -> None:
             user = username(args.user)
             key = args.key_path or Path.home() / ".ssh" / f"boxman-{conf['machine']}-ed25519"
             keypair(key)
-            add_key(session.client("ssm"), instance, user, Path(str(key) + ".pub"))
-            tunnel = proxy(conf)
+            tunnel = proxy({**conf, "ssh_user": user, "key_path": key})
             if args.action == "ssh":
                 cmd = ["ssh", "-t", "-o", f"ProxyCommand={tunnel}", "-o", "StrictHostKeyChecking=accept-new", "-i", str(key), f"{user}@{instance}"]
                 if args.container:

@@ -15,6 +15,7 @@
 | `boxman ec2 start` / `stop` | Start or stop the instance and wait |
 | `boxman ec2 connect [-u USER]` | Start an interactive SSM session |
 | `boxman ec2 run [-u USER] COMMAND` | Run a command through SSM without a terminal |
+| `boxman ec2 setup --user USER [--bootstrap-user BOOTSTRAP]` | Bootstrap the remote host and create/configure USER through EIC SSH |
 | `boxman ec2 ssh -u USER [-c CONTAINER]` | SSH through the Instance Connect Endpoint |
 | `boxman ec2 ssh-config -u USER [--alias NAME] [--herdr]` | Install a key and write a local SSH/optional Herdr machine entry |
 

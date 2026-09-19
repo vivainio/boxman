@@ -121,6 +121,7 @@ boxman ec2 --machine blue status
 boxman ec2 start
 boxman ec2 stop
 boxman ec2 connect -u myuser
+boxman ec2 setup --user alice
 boxman ec2 ssh -u myuser
 boxman ec2 ssh-config -u myuser --herdr
 boxman ec2 run -u myuser 'uname -a'
@@ -137,10 +138,14 @@ one, or set `[ec2].default_machine` for the default.
 
 Deployment creates or updates a CloudFormation stack containing an Ubuntu EC2
 instance, an SSM role, and an EC2 Instance Connect Endpoint. SSH uses that
-endpoint and installs a generated public key through SSM. `ssh-config` writes a
-marked host entry to `~/.ssh/config`; its alias defaults to the stack name. Pass
-`--herdr` to prepare the remote Herdr server and save the same SSH machine with
-`herdr machine add`. The stack name selects the instance for
+endpoint and sends a short-lived public key through EC2 Instance Connect before
+opening SSH. `ssh-config` writes a marked host entry to `~/.ssh/config`; its
+alias defaults to the machine name. Pass `--herdr` to prepare the remote Herdr
+server and save the same SSH machine with `herdr machine add`. `setup --user USER`
+uses the Ubuntu image's `ubuntu` account by default as the bootstrap account,
+creates `USER` if needed, and uses that SSH path to stage Boxman remotely and
+run the system, user, and verify steps. Pass `--bootstrap-user ACCOUNT` for a
+custom image. The machine name selects the instance for
 all subsequent commands. Starting, stopping, and deploying incur AWS charges.
 
 ## Release
