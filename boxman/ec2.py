@@ -309,6 +309,7 @@ def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
         remote_ssh(bootstrap_alias, create_user)
         remote_ssh(bootstrap_alias, f"sudo env PYTHONPATH={python_path} python3 -m boxman.cli system {user}")
         remote_ssh(target_alias, f"env PYTHONPATH={python_path} python3 -m boxman.cli user")
+        remote_ssh(target_alias, "\"$HOME/.local/bin/uv\" tool install --upgrade 'boxman[ec2]'")
         remote_ssh(target_alias, f"env PYTHONPATH={python_path} python3 -m boxman.cli verify")
     finally:
         remote_ssh(bootstrap_alias, f"rm -rf {shlex.quote(remote_path)}")

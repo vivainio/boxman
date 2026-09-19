@@ -82,6 +82,7 @@ Owner = "someone"
         self.assertIn(("red-bootstrap", "sudo env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli system --packages-only"), commands)
         self.assertIn(("red-bootstrap", "sudo env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli system alice"), commands)
         self.assertIn(("red", "env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli user"), commands)
+        self.assertIn(("red", "\"$HOME/.local/bin/uv\" tool install --upgrade 'boxman[ec2]'"), commands)
         self.assertIn(("red", "env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli verify"), commands)
 
 
