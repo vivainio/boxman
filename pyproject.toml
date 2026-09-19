@@ -5,12 +5,37 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "boxman"
 version = "0.1.0"
-description = "Set up and manage a Linux development box"
+description = "Set up and manage an Ubuntu development box"
+readme = "README.md"
+keywords = ["ubuntu", "development", "ec2", "cloudformation", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Systems Administration",
+]
 requires-python = ">=3.11"
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/vivainio/boxman"
+Documentation = "https://vivainio.github.io/boxman/"
+Repository = "https://github.com/vivainio/boxman"
+Issues = "https://github.com/vivainio/boxman/issues"
+
+[project.optional-dependencies]
+ec2 = ["boto3>=1.34"]
 
 [project.scripts]
 boxman = "boxman.cli:main"
 
+[tool.setuptools]
+packages = ["boxman", "boxman.data"]
+
 [tool.setuptools.package-data]
-boxman = ["data/*.toml"]
+boxman = ["data/*.toml", "data/*.yaml"]

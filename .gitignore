@@ -9,3 +9,9 @@ build/
 credentials*
 .claude/
 .copilot/
+
+.venv/
+dist/
+site/
+.pytest_cache/
+.ruff_cache/

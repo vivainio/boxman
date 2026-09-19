@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  EC2 development box:
+  one instance, no inbound security-group rules, SSM-only access.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  InstanceType:
+    Type: String
+  VolumeSizeGb:
+    Type: Number
+  InstanceName:
+    Type: String
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${AWS::StackName}-sg"
+      GroupDescription: Shared coding-agent dev box - no inbound rules, SSM only
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg"
+      # No SecurityGroupIngress here: no inbound rules from the internet, on
+      # purpose. The only inbound access is via SecurityGroupIngressFromEice
+      # below, scoped to the Instance Connect Endpoint's own security group.
+      # No SecurityGroupEgress: keeps CloudFormation's default allow-all outbound.
+
+  EiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${AWS::StackName}-eice-sg"
+      GroupDescription: EC2 Instance Connect Endpoint - no inbound rules needed
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-eice-sg"
+
+  SecurityGroupIngressFromEice:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref EiceSecurityGroup
+      Description: SSH from the EC2 Instance Connect Endpoint only
+
+  InstanceConnectEndpoint:
+    Type: AWS::EC2::InstanceConnectEndpoint
+    Properties:
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref EiceSecurityGroup
+      PreserveClientIp: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-eice"
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-ssm-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ssm-role"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${AWS::StackName}-ssm-profile"
+      Roles:
+        - !Ref InstanceRole
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      IamInstanceProfile: !Ref InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !Ref VolumeSizeGb
+            VolumeType: gp3
+            DeleteOnTermination: true
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+
+Outputs:
+  InstanceId:
+    Value: !Ref Instance
+  SecurityGroupId:
+    Value: !Ref SecurityGroup
+  InstanceRoleArn:
+    Value: !GetAtt InstanceRole.Arn
+  InstanceProfileArn:
+    Value: !GetAtt InstanceProfile.Arn
+  # No PublicIp output: !GetAtt Instance.PublicIp fails outright whenever the
+  # instance isn't running (stopped by uptime governance, mid-restart, etc.),
+  # breaking every subsequent stack operation. basbox.py status() already
+  # reads the live public IP via ec2:DescribeInstances instead.
+  InstanceConnectEndpointId:
+    Value: !Ref InstanceConnectEndpoint

@@ -1,0 +1,55 @@
+[project]
+site_name = "Boxman"
+site_description = "Set up and operate a Linux development box."
+site_url = "https://vivainio.github.io/boxman/"
+docs_dir = "docs"
+repo_url = "https://github.com/vivainio/boxman"
+repo_name = "vivainio/boxman"
+edit_uri = "edit/main/docs/"
+nav = [
+  { "Home" = "index.md" },
+  { "How Boxman fits together" = "concepts.md" },
+  { "Get started" = "getting-started.md" },
+  { "EC2 boxes" = "ec2.md" },
+  { "Set up the host" = "host-setup.md" },
+  { "Private vault" = "vault.md" },
+  { "Command reference" = "commands.md" },
+  { "Troubleshooting" = "troubleshooting.md" },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.action.edit",
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.sections",
+  "navigation.top",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "indigo"
+accent = "deep-orange"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "indigo"
+accent = "deep-orange"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/vivainio/boxman"
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.superfences]
