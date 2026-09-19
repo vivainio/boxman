@@ -115,7 +115,7 @@ boxman ec2 start
 boxman ec2 stop
 boxman ec2 connect -u myuser
 boxman ec2 ssh -u myuser
-boxman ec2 ssh-config -u myuser --alias mybox
+boxman ec2 ssh-config -u myuser --herdr
 boxman ec2 run -u myuser 'uname -a'
 ```
 
@@ -130,7 +130,9 @@ file selects one stack; use `--config PATH` for another box.
 Deployment creates or updates a CloudFormation stack containing an Ubuntu EC2
 instance, an SSM role, and an EC2 Instance Connect Endpoint. SSH uses that
 endpoint and installs a generated public key through SSM. `ssh-config` writes a
-marked host entry to `~/.ssh/config`. The stack name selects the instance for
+marked host entry to `~/.ssh/config`; its alias defaults to the stack name. Pass
+`--herdr` to prepare the remote Herdr server and save the same SSH machine with
+`herdr machine add`. The stack name selects the instance for
 all subsequent commands. Starting, stopping, and deploying incur AWS charges.
 
 ## Release

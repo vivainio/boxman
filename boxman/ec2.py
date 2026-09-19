@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -179,6 +180,16 @@ def write_ssh_config(alias: str, body: str) -> None:
     path.chmod(0o600)
 
 
+def register_herdr(alias: str, user: str) -> None:
+    """Prepare the remote Herdr server and save the SSH machine locally."""
+    if shutil.which("herdr") is None:
+        raise SystemExit("--herdr requires the herdr command on the local machine")
+    subprocess.run(
+        ["herdr", "machine", "add", alias, "--label", f"Boxman {user}"],
+        check=True,
+    )
+
+
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="boxman ec2")
     parser.add_argument("--config", type=Path, help="TOML file (default: $XDG_CONFIG_HOME/boxman/ec2.toml)")
@@ -202,8 +213,9 @@ def main(argv: list[str]) -> None:
     ssh.add_argument("-c", "--container")
     ssh_config = sub.add_parser("ssh-config")
     ssh_config.add_argument("-u", "--user", required=True)
-    ssh_config.add_argument("--alias", required=True)
+    ssh_config.add_argument("--alias", help="local SSH and Herdr name (default: stack name)")
     ssh_config.add_argument("--key-path", type=Path)
+    ssh_config.add_argument("--herdr", action="store_true", help="prepare the remote Herdr server and save this SSH machine")
     run = sub.add_parser("run")
     run.add_argument("command")
     run.add_argument("-u", "--user")
@@ -285,8 +297,11 @@ def main(argv: list[str]) -> None:
                     cmd.append(f"podman exec -it {shlex.quote(args.container)} bash")
                 subprocess.run(cmd, check=True)
             else:
-                write_ssh_config(args.alias, f"Host {args.alias}\n    HostName {instance}\n    User {user}\n    IdentityFile {key}\n    ProxyCommand {tunnel}")
-                print(f"SSH host {args.alias} configured for {user}@{instance}")
+                alias = args.alias or name
+                write_ssh_config(alias, f"Host {alias}\n    HostName {instance}\n    User {user}\n    IdentityFile {key}\n    ProxyCommand {tunnel}")
+                print(f"SSH host {alias} configured for {user}@{instance}")
+                if args.herdr:
+                    register_herdr(alias, user)
         elif args.action == "run":
             execute(session.client("ssm"), instance, args.command, args.user)
     except botocore.exceptions.BotoCoreError as exc:

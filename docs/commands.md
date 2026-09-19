@@ -16,6 +16,6 @@
 | `boxman ec2 connect [-u USER]` | Start an interactive SSM session |
 | `boxman ec2 run [-u USER] COMMAND` | Run a command through SSM without a terminal |
 | `boxman ec2 ssh -u USER [-c CONTAINER]` | SSH through the Instance Connect Endpoint |
-| `boxman ec2 ssh-config -u USER --alias NAME` | Install a key and write a local SSH host entry |
+| `boxman ec2 ssh-config -u USER [--alias NAME] [--herdr]` | Install a key and write a local SSH/optional Herdr machine entry |
 
 Use `boxman ec2 --help` and `boxman ec2 ACTION --help` for option details. EC2 global options go before `ACTION`.

@@ -27,11 +27,12 @@ boxman ec2 run -u myuser 'id'
 ```bash
 boxman ec2 ssh -u myuser
 boxman ec2 ssh -u myuser -c my-container
-boxman ec2 ssh-config -u myuser --alias mybox
+boxman ec2 ssh-config -u myuser
+boxman ec2 ssh-config -u myuser --alias mybox --herdr
 ssh mybox
 ```
 
-Both SSH commands generate a dedicated local key pair when needed and install the public key in the remote user's `authorized_keys` using SSM. `ssh-config` writes a marked host block to `~/.ssh/config`, so OpenSSH tools and VS Code Remote SSH can use the alias. You can pass `--key-path PATH` to choose the key pair. Re-run `ssh-config` after an instance replacement.
+Both SSH commands generate a dedicated local key pair when needed and install the public key in the remote user's `authorized_keys` using SSM. `ssh-config` writes a marked host block to `~/.ssh/config`, so OpenSSH tools and VS Code Remote SSH can use the alias. The alias defaults to the configured `stack_name`; pass `--alias` when you want a different local name. `--herdr` then runs `herdr machine add` for that same alias, which prepares the remote Herdr server and saves the machine locally. You can pass `--key-path PATH` to choose the key pair. Re-run `ssh-config` after an instance replacement.
 
 ## More than one box
 

@@ -45,6 +45,14 @@ Owner = "someone"
             with self.assertRaisesRegex(SystemExit, "vpc-id"):
                 ec2.init_stack("sample", {})
 
+    def test_register_herdr_prepares_named_machine(self) -> None:
+        with patch.object(ec2.shutil, "which", return_value="/usr/bin/herdr"), patch.object(ec2.subprocess, "run") as run:
+            ec2.register_herdr("my-box", "alice")
+        run.assert_called_once_with(
+            ["herdr", "machine", "add", "my-box", "--label", "Boxman alice"],
+            check=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

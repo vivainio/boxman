@@ -20,7 +20,7 @@ The editable stack template lives at `${XDG_CONFIG_HOME:-~/.config}/boxman/stack
 
 `connect` opens an interactive SSM session. `run` uses SSM Run Command without a terminal. `ssh` and `ssh-config` use the EC2 Instance Connect Endpoint as an SSH tunnel. The template permits port 22 from that endpoint's security group, and has no general inbound rule. The machine still needs the AWS network access required for SSM and package installation.
 
-`ssh-config` stores the current instance ID in `~/.ssh/config`. If CloudFormation replaces the instance, run `ssh-config` again to refresh the entry.
+`ssh-config` stores the current instance ID in `~/.ssh/config`. Its alias defaults to the `stack_name`, which is the stable box identity in Boxman; the alias is only the local SSH/Herdr name. Pass `--herdr` to run `herdr machine add` after writing the SSH entry. If CloudFormation replaces the instance, run `ssh-config` again to refresh the entry.
 
 ## Private data boundary
 
