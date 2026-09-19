@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+build/
+*.egg-info/
+.env
+.env.*
+*.pem
+*.key
+credentials*
+.claude/
+.copilot/
