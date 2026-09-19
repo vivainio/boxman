@@ -2,12 +2,16 @@
 
 ## Install the local command
 
-From a checkout, install Boxman with its optional EC2 dependency:
+Install the published Boxman command with uv. Add the `ec2` extra when you
+want the AWS commands:
 
 ```bash
-uv tool install '.[ec2]'
+uv tool install --upgrade boxman
+uv tool install --upgrade 'boxman[ec2]'
 boxman ec2 --help
 ```
+
+For local development, use `uv tool install --editable .` from a checkout.
 
 You need an AWS CLI profile with credentials for the target account, plus AWS CLI v2 and OpenSSH for the access commands. `connect` also needs the Session Manager plugin. Boxman itself uses boto3 for AWS API calls.
 

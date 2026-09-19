@@ -3,9 +3,9 @@
 Boxman supports Ubuntu 24.04. Run the system step as root, and the user step separately from each login account. The first command works with Ubuntu's system Python before uv is installed:
 
 ```bash
-sudo python3 -m boxman.cli system
-python3 -m boxman.cli user
-python3 -m boxman.cli verify
+sudo boxman system
+boxman user
+boxman verify
 ```
 
 Run these commands from a Boxman checkout. `system` installs packages from the bundled `linux-tools.toml` recipe through zipget, configures Git LFS, allocates subordinate UID/GID ranges, and enables lingering for rootless Podman. Pass explicit usernames to `system` to limit user configuration, or omit them to select normal login accounts. It checks that the host is Ubuntu 24.04.

@@ -12,19 +12,18 @@ login account. The first command works with the Ubuntu system Python before
 `uv` is installed:
 
 ```bash
-sudo python3 -m boxman.cli system
-python3 -m boxman.cli user
+sudo boxman system
+boxman user
 ```
 
-With `uv` available, run it without installing the package:
+Install the published command with uv:
 
 ```bash
-uvx --from . boxman vault status
+uv tool install --upgrade boxman
+boxman vault status
 ```
 
-After publishing the repository, `uvx --from
-git+https://github.com/vivainio/boxman boxman ...` can run the same console
-command. For a persistent command, use `uv tool install .` from this checkout.
+For local development, use `uv tool install --editable .` from this checkout.
 
 `boxman system` uses zipget to install the apt packages declared in
 `linux-tools.toml`, sets up Git LFS, and configures rootless Podman for normal
@@ -54,11 +53,11 @@ The recipe installs `gocryptfs` and FUSE 3. Each user initializes their own
 vault once and unlocks it after a reboot or unmount:
 
 ```bash
-uvx --from . boxman vault init
-uvx --from . boxman vault unlock
-uvx --from . boxman vault status
-uvx --from . boxman claude  # starts Claude with its config in the mounted vault
-uvx --from . boxman vault lock  # after stopping processes that use the mount
+boxman vault init
+boxman vault unlock
+boxman vault status
+boxman claude  # starts Claude with its config in the mounted vault
+boxman vault lock  # after stopping processes that use the mount
 ```
 
 Encrypted files live in `~/.private.cipher`; the plaintext mount is
@@ -84,7 +83,7 @@ Install the optional AWS dependency, then create
 `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`:
 
 ```bash
-uv tool install '.[ec2]'
+uv tool install --upgrade 'boxman[ec2]'
 mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/boxman"
 ```
 
