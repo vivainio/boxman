@@ -99,7 +99,7 @@ def claude(args: list[str]) -> None:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        fail("Usage: boxman {system|user|vault|claude|verify|ec2} ...")
+        fail("Usage: boxman {system|user|vault|claude|secrets|verify|ec2} ...")
     command, *args = sys.argv[1:]
     if command == "system":
         from boxman import system
@@ -121,6 +121,10 @@ def main() -> None:
         from boxman import ec2
 
         ec2.main(args)
+    elif command == "secrets":
+        from boxman import secrets
+
+        secrets.main(args)
     elif command == "verify":
         if args:
             fail("Usage: boxman verify")
@@ -128,7 +132,7 @@ def main() -> None:
 
         verify.main()
     else:
-        fail("Usage: boxman {system|user|vault|claude|verify|ec2} ...")
+        fail("Usage: boxman {system|user|vault|claude|secrets|verify|ec2} ...")
 
 
 if __name__ == "__main__":

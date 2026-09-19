@@ -125,6 +125,7 @@ boxman ec2 setup --user alice
 boxman ec2 ssh -u myuser
 boxman ec2 ssh-config -u myuser --herdr
 boxman ec2 run -u myuser 'uname -a'
+boxman ec2 --machine red secrets send ./secrets.json -u myuser
 ```
 
 `init --machine red` writes `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/red.yaml`
@@ -147,6 +148,29 @@ creates `USER` if needed, and uses that SSH path to stage Boxman remotely and
 run the system, user, and verify steps. Pass `--bootstrap-user ACCOUNT` for a
 custom image. The machine name selects the instance for
 all subsequent commands. Starting, stopping, and deploying incur AWS charges.
+
+## Remote secrets
+
+Keep a JSON object of string secrets on your laptop in a file readable only
+by you (`chmod 600 secrets.json`). Upload it to the selected machine:
+
+```bash
+boxman ec2 --machine red secrets send ./secrets.json -u alice
+```
+
+The remote `boxman secrets receive` command loads the document into the
+default tempkeys keyset in Alice's Linux user keyring. On the host,
+`boxman secrets read NAME` prints one value; `tempkeys list --set default`
+lists names, and `tempkeys clear` removes the keyset. Names must be
+environment variable names and values must be nonempty strings. Any process
+running as Alice can potentially read these values. Kernel keyrings do not
+survive reboot, so resend the document from the laptop after a restart. Keep
+the laptop copy as the source of truth. `boxman user` installs tempkeys from PyPI and configures Git to read `GH_TOKEN` through its
+credential helper for HTTPS `github.com` remotes. A `git push` fetches the
+token when Git needs it; it is not put in the shell environment. GitHub CLI
+commands still need `tempkeys --user run -e GH_TOKEN -- gh ...` or another
+GH_TOKEN environment setting. Secrets stored by the earlier Boxman format need to be
+resent after upgrading; tempkeys uses a different file format.
 
 ## Release
 

@@ -275,6 +275,28 @@ def remote_ssh(alias: str, command: str) -> None:
     subprocess.run(["ssh", "-t", alias, command], check=True)
 
 
+def send_secrets(conf: dict, instance: str, user: str, source: Path) -> None:
+    """Stream a local JSON document through SSH to the remote receiver."""
+    if source.is_symlink() or not source.is_file():
+        raise SystemExit(f"Secrets source must be a regular file: {source}")
+    if source.stat().st_mode & 0o077:
+        raise SystemExit(f"Secrets source must be readable only by its owner (chmod 600): {source}")
+    from boxman.secrets import MAX_DOCUMENT, parse_document
+
+    with source.open("rb") as input_file:
+        data = input_file.read(MAX_DOCUMENT + 1)
+    parse_document(data)
+    key = Path.home() / ".ssh" / f"boxman-{conf['machine']}-ed25519"
+    keypair(key)
+    tunnel = proxy({**conf, "ssh_user": user, "key_path": key})
+    subprocess.run(
+        ["ssh", "-T", "-o", f"ProxyCommand={tunnel}", "-o", "StrictHostKeyChecking=accept-new",
+         "-i", str(key), f"{user}@{instance}", '"$HOME/.local/bin/boxman" secrets receive'],
+        input=data,
+        check=True,
+    )
+
+
 def stage_package(alias: str) -> tuple[Path, str]:
     """Copy this installed Boxman package to a temporary remote directory."""
     package_dir = Path(__file__).resolve().parent
@@ -351,6 +373,10 @@ def main(argv: list[str]) -> None:
     run = sub.add_parser("run")
     run.add_argument("command")
     run.add_argument("-u", "--user")
+    secrets_command = sub.add_parser("secrets", help="send a local JSON secrets document to the selected machine")
+    secrets_command.add_argument("operation", choices=["send"])
+    secrets_command.add_argument("source", type=Path)
+    secrets_command.add_argument("-u", "--user", required=True)
     args = parser.parse_args(argv)
     if args.action == "proxy":
         eic_proxy(
@@ -466,6 +492,8 @@ def main(argv: list[str]) -> None:
                     register_herdr(alias, user)
         elif args.action == "run":
             execute(session.client("ssm"), instance, args.command, args.user)
+        elif args.action == "secrets":
+            send_secrets(conf, instance, username(args.user), args.source)
     except botocore.exceptions.BotoCoreError as exc:
         raise SystemExit(f"AWS error: {exc}") from exc
     except botocore.exceptions.ClientError as exc:

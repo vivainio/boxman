@@ -23,6 +23,7 @@ COMMANDS = {
     "zoxide": ("--version",),
     "delta": ("--version",),
     "uv": ("--version",),
+    "tempkeys": ("--version",),
     "claude": ("--version",),
     "copilot": ("version",),
 }

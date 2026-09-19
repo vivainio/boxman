@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -166,6 +167,14 @@ def install_uv(temp: Path) -> None:
     run("sh", str(installer), env=env)
 
 
+def configure_git_credentials() -> None:
+    """Use tempkeys for HTTPS credentials from github.com only."""
+    setting = "credential.https://github.com.helper"
+    helper = f"!{shlex.quote(str(LOCAL_BIN / 'tempkeys'))} --user git-credential"
+    run("git", "config", "--global", "--replace-all", setting, "")
+    run("git", "config", "--global", "--add", setting, helper)
+
+
 def main() -> None:
     if os.geteuid() == 0:
         sys.exit("boxman user must run as the target user, not root")
@@ -182,6 +191,9 @@ def main() -> None:
         install_claude_code(temp)
         install_copilot(temp)
         install_uv(temp)
+
+    run(str(LOCAL_BIN / "uv"), "tool", "install", "--upgrade", "tempkeys")
+    configure_git_credentials()
 
     log("user setup complete; authenticate claude, copilot, and gh interactively")
 

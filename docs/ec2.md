@@ -38,6 +38,31 @@ ssh mybox
 
 Both SSH commands generate a dedicated local key pair when needed. Their ProxyCommand calls EC2 Instance Connect to send the public key for the selected Unix user immediately before opening the tunnel; no persistent `authorized_keys` change is required. `ssh-config` writes a marked host block to `~/.ssh/config`, so OpenSSH tools and VS Code Remote SSH can use the alias. The alias defaults to the selected machine name; pass `--alias` when you want a different local name. `--herdr` then runs `herdr machine add` for that same alias, which prepares the remote Herdr server and saves the machine locally. You can pass `--key-path PATH` to choose the key pair. Re-run `ssh-config` after an instance replacement.
 
+## Sending secrets
+
+Create a JSON file of string values on your laptop and restrict its access:
+
+```json
+{"GH_TOKEN":"github-token"}
+```
+
+```bash
+chmod 600 secrets.json
+boxman ec2 --machine red secrets send ./secrets.json -u alice
+```
+
+Boxman sends the document over SSH to `boxman secrets receive` running as
+Alice. The host loads it into the default tempkeys keyset. Inside that Unix
+account, `boxman secrets read NAME` prints one value, and
+`tempkeys clear` removes the keyset. Names must be environment
+variable names and values must be nonempty strings. Every process running as
+Alice can potentially read these values. The laptop file remains the source
+of truth: resend it after a host reboot, which clears kernel keyrings. An
+upload replaces the whole keyset atomically. For HTTPS GitHub remotes,
+`boxman user` configures Git to fetch `GH_TOKEN` from tempkeys when needed.
+SSH Git remotes use SSH keys instead. Secrets stored by the earlier
+Boxman format need to be resent after upgrading.
+
 ## More than one box
 
 Add another `[machines.blue]` or `[machines.green]` table and run commands with `boxman ec2 --machine blue ...`. Each machine gets its own YAML file and derived stack in the boxman config directory. An alias passed to `ssh-config` is local to your SSH config; choose distinct aliases for boxes you want to keep available together.
