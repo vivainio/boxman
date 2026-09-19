@@ -9,7 +9,7 @@
 | `boxman vault init` | Initialize the current user's encrypted directory |
 | `boxman vault unlock` / `lock` / `status` | Mount, unmount, or check that directory |
 | `boxman claude [ARGS ...]` | Launch Claude Code with config in the unlocked vault |
-| `boxman ec2 init` | Create a per-stack YAML template from explicit instance settings |
+| `boxman ec2 --machine NAME init` | Create a per-machine YAML template from explicit instance settings |
 | `boxman ec2 deploy` | Create or update the CloudFormation stack |
 | `boxman ec2 status` | Show instance state and SSM registration |
 | `boxman ec2 start` / `stop` | Start or stop the instance and wait |

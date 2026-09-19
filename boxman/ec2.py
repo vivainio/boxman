@@ -26,6 +26,7 @@ PARAMETERS = {
 }
 USERNAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}\Z")
 ALIAS = re.compile(r"[A-Za-z0-9_.-]+\Z")
+MACHINE = re.compile(r"[a-z][a-z0-9-]{0,31}\Z")
 
 
 def required(value: str | None, name: str) -> str:
@@ -40,14 +41,22 @@ def username(value: str) -> str:
     return value
 
 
+def machine_name(value: str) -> str:
+    if not MACHINE.fullmatch(value):
+        raise SystemExit(f"Invalid machine name: {value!r} (use names such as red, blue, or green)")
+    return value
+
+
 def config_dir() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "boxman"
 
 
-def stack_template(name: str) -> Path:
-    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9-]{0,127}", name):
-        raise SystemExit("Stack name must be a valid CloudFormation stack name")
-    return config_dir() / "stacks" / f"{name}.yaml"
+def stack_name(machine: str) -> str:
+    return f"boxman-{machine_name(machine)}"
+
+
+def stack_template(machine: str) -> Path:
+    return config_dir() / "stacks" / f"{machine_name(machine)}.yaml"
 
 
 def init_stack(name: str, values: dict) -> Path:
@@ -70,27 +79,42 @@ def init_stack(name: str, values: dict) -> Path:
 
 
 def settings(args: argparse.Namespace) -> dict:
-    config = {}
+    document = {}
     config_path = args.config or config_dir() / "ec2.toml"
     if config_path.is_file():
         with config_path.open("rb") as source:
-            config = tomllib.load(source)
+            document = tomllib.load(source)
     elif args.config:
         raise SystemExit(f"Config file does not exist: {config_path}")
-    if config:
-        if set(config) - {"ec2"} or not isinstance(config.get("ec2"), dict):
-            raise SystemExit("Config must contain an [ec2] table")
-        config = config["ec2"]
-    keys = {"profile", "region", "stack_name", "tags"}
-    if set(config) - keys:
-        raise SystemExit(f"Unknown [ec2] settings: {', '.join(sorted(set(config) - keys))}")
-    result = {key: getattr(args, key, None) or config.get(key) for key in keys}
-    result["stack_name"] = required(result["stack_name"], "--stack-name")
-    stack_template(result["stack_name"])
+    if set(document) - {"ec2", "machines"}:
+        raise SystemExit("Config may contain only [ec2] and [machines.<name>] tables")
+    ec2_config = document.get("ec2", {})
+    machines = document.get("machines", {})
+    if not isinstance(ec2_config, dict) or not isinstance(machines, dict):
+        raise SystemExit("Config must contain [ec2] and [machines.<name>] tables")
+    if set(ec2_config) - {"default_machine"}:
+        raise SystemExit("[ec2] supports only default_machine")
+    selected = getattr(args, "machine", None) or ec2_config.get("default_machine")
+    if not selected and len(machines) == 1:
+        selected = next(iter(machines))
+    selected = machine_name(required(selected, "--machine or [ec2].default_machine"))
+    machine_config = machines.get(selected, {})
+    if not isinstance(machine_config, dict):
+        raise SystemExit(f"[machines.{selected}] must be a table")
+    if set(machine_config) - {"profile", "region", "tags"}:
+        raise SystemExit(f"Unknown [machines.{selected}] settings")
+    result = {
+        "machine": selected,
+        "stack_name": stack_name(selected),
+        "profile": getattr(args, "profile", None) or machine_config.get("profile"),
+        "region": getattr(args, "region", None) or machine_config.get("region"),
+    }
     if args.action != "init":
         result["profile"] = required(result["profile"], "--profile")
         result["region"] = required(result["region"], "--region")
-    tags = config.get("tags", {}).copy()
+        if selected not in machines:
+            raise SystemExit(f"No configuration for machine {selected!r}; add [machines.{selected}]")
+    tags = machine_config.get("tags", {}).copy()
     if not isinstance(tags, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in tags.items()):
         raise SystemExit("[ec2.tags] must contain string keys and values")
     for item in getattr(args, "tag", None) or []:
@@ -185,7 +209,7 @@ def register_herdr(alias: str, user: str) -> None:
     if shutil.which("herdr") is None:
         raise SystemExit("--herdr requires the herdr command on the local machine")
     subprocess.run(
-        ["herdr", "machine", "add", alias, "--label", f"Boxman {user}"],
+        ["herdr", "machine", "add", alias, "--label", f"Boxman {alias} ({user})"],
         check=True,
     )
 
@@ -195,7 +219,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--config", type=Path, help="TOML file (default: $XDG_CONFIG_HOME/boxman/ec2.toml)")
     parser.add_argument("--profile")
     parser.add_argument("--region")
-    parser.add_argument("--stack-name")
+    parser.add_argument("--machine", help="machine alias such as red, blue, or green")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("init", help="create a local stack template under the boxman config directory")
     init = sub.choices["init"]
@@ -228,7 +252,7 @@ def main(argv: list[str]) -> None:
                 raise SystemExit("--volume-size-gb must be at least 8")
         except ValueError as exc:
             raise SystemExit("--volume-size-gb must be an integer") from exc
-        print(f"Created {init_stack(conf['stack_name'], values)}")
+        print(f"Created {init_stack(conf['machine'], values)}")
         return
     try:
         import boto3
@@ -240,7 +264,7 @@ def main(argv: list[str]) -> None:
         cfn = session.client("cloudformation")
         name = conf["stack_name"]
         if args.action == "deploy":
-            template = stack_template(name)
+            template = stack_template(conf["machine"])
             if not template.is_file():
                 raise SystemExit(f"Stack template missing: {template}; run boxman ec2 init first")
             body = template.read_text()
@@ -287,7 +311,7 @@ def main(argv: list[str]) -> None:
             subprocess.run(cmd, check=True)
         elif args.action in ("ssh", "ssh-config"):
             user = username(args.user)
-            key = args.key_path or Path.home() / ".ssh" / f"boxman-{name}-ed25519"
+            key = args.key_path or Path.home() / ".ssh" / f"boxman-{conf['machine']}-ed25519"
             keypair(key)
             add_key(session.client("ssm"), instance, user, Path(str(key) + ".pub"))
             tunnel = proxy(conf)

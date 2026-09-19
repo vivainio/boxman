@@ -89,13 +89,19 @@ mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/boxman"
 
 ```toml
 [ec2]
+default_machine = "red"
+
+[machines.red]
 profile = "your-aws-profile"
 region = "your-region"
-stack_name = "your-stack-name"
 
-[ec2.tags]
+[machines.red.tags]
 Owner = "your-owner"
-Environment = "your-environment"
+Environment = "development"
+
+[machines.blue]
+profile = "your-aws-profile"
+region = "your-region"
 ```
 
 The config contains no credentials; AWS uses the named profile. Supply the tags
@@ -105,12 +111,13 @@ and tags. Command-line options override the file;
 file. Put global options before the action:
 
 ```bash
-boxman ec2 init --vpc-id vpc-... --subnet-id subnet-... \
+boxman ec2 --machine red init --vpc-id vpc-... --subnet-id subnet-... \
   --instance-type t3.xlarge --volume-size-gb 100 \
   --instance-name mybox \
   --ami-id /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
 boxman ec2 deploy
-boxman ec2 status
+boxman ec2 status                         # uses default_machine (red)
+boxman ec2 --machine blue status
 boxman ec2 start
 boxman ec2 stop
 boxman ec2 connect -u myuser
@@ -119,13 +126,14 @@ boxman ec2 ssh-config -u myuser --herdr
 boxman ec2 run -u myuser 'uname -a'
 ```
 
-`init` writes `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/<stack_name>.yaml`
-with the instance settings as parameter defaults and refuses to overwrite an
-existing file. Edit that YAML to customize the stack. `deploy` reads the YAML
-for the configured stack name and sends its defaults as CloudFormation
-parameters. Tags from `[ec2.tags]` and repeatable
+`init --machine red` writes `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/red.yaml`
+and derives the CloudFormation stack name `boxman-red`. It includes the
+instance settings as parameter defaults and refuses to overwrite an existing
+file. Edit that YAML to customize the stack. `deploy` reads the YAML for the
+selected machine and sends its defaults as CloudFormation parameters. Tags from `[machines.red.tags]` and repeatable
 `--tag KEY=VALUE` options become CloudFormation stack tags. A single config
-file selects one stack; use `--config PATH` for another box.
+file can describe red, blue, and green boxes; use `--machine NAME` to select
+one, or set `[ec2].default_machine` for the default.
 
 Deployment creates or updates a CloudFormation stack containing an Ubuntu EC2
 instance, an SSM role, and an EC2 Instance Connect Endpoint. SSH uses that

@@ -14,16 +14,20 @@ class Ec2ConfigTests(unittest.TestCase):
             path = Path(directory) / "boxman"
             path.mkdir()
             (path / "ec2.toml").write_text('''[ec2]
+default_machine = "red"
+
+[machines.red]
 profile = "example"
 region = "eu-west-1"
-stack_name = "sample"
-[ec2.tags]
+[machines.red.tags]
 Owner = "someone"
 ''')
-            parser = __import__("argparse").Namespace(config=None, action="deploy", profile=None, region=None, stack_name=None, tag=["Owner=other"], **{key: None for key in ec2.PARAMETERS})
+            parser = __import__("argparse").Namespace(config=None, action="deploy", profile=None, region=None, machine=None, tag=["Owner=other"], **{key: None for key in ec2.PARAMETERS})
             with patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}):
                 result = ec2.settings(parser)
             self.assertEqual(result["profile"], "example")
+            self.assertEqual(result["machine"], "red")
+            self.assertEqual(result["stack_name"], "boxman-red")
             self.assertEqual(result["tags"], {"Owner": "other"})
 
     def test_init_materializes_stack_beneath_xdg_config(self) -> None:
@@ -37,8 +41,8 @@ Owner = "someone"
 
     def test_init_cli_creates_stack_without_aws_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}):
-            ec2.main(["--stack-name", "demo", "init", "--vpc-id", "vpc-1", "--subnet-id", "subnet-1", "--instance-type", "t3.small", "--volume-size-gb", "30", "--instance-name", "demo", "--ami-id", "ami-1"])
-            self.assertIn('Default: "ami-1"', (Path(directory) / "boxman" / "stacks" / "demo.yaml").read_text())
+            ec2.main(["--machine", "red", "init", "--vpc-id", "vpc-1", "--subnet-id", "subnet-1", "--instance-type", "t3.small", "--volume-size-gb", "30", "--instance-name", "demo", "--ami-id", "ami-1"])
+            self.assertIn('Default: "ami-1"', (Path(directory) / "boxman" / "stacks" / "red.yaml").read_text())
 
     def test_init_requires_every_stack_value(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}):
@@ -49,7 +53,7 @@ Owner = "someone"
         with patch.object(ec2.shutil, "which", return_value="/usr/bin/herdr"), patch.object(ec2.subprocess, "run") as run:
             ec2.register_herdr("my-box", "alice")
         run.assert_called_once_with(
-            ["herdr", "machine", "add", "my-box", "--label", "Boxman alice"],
+            ["herdr", "machine", "add", "my-box", "--label", "Boxman my-box (alice)"],
             check=True,
         )
 

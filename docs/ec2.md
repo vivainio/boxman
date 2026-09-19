@@ -2,16 +2,17 @@
 
 ## Local files
 
-The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has an `[ec2]` table with `profile`, `region`, and `stack_name`; `[ec2.tags]` is optional. Use `boxman ec2 --config PATH ...` to select another config. Global options such as `--config`, `--profile`, `--region`, and `--stack-name` go **before** the action.
+The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has `[machines.red]`, `[machines.blue]`, or `[machines.green]` tables with `profile`, `region`, and optional `tags`. Set `[ec2].default_machine` to choose the default. Use `--machine NAME` to override it, and `--config PATH` to select another machine collection. Global options such as `--config`, `--machine`, `--profile`, and `--region` go **before** the action.
 
-`init` creates `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/<stack_name>.yaml` and refuses to overwrite it. The generated template includes all six required instance values as CloudFormation parameter defaults. To change a box, edit those defaults or the resource definitions, then run `deploy`. `deploy` reads the defaults from the YAML and passes them as stack parameters. Keep the `Parameters` entries in the generated form so Boxman can read them.
+`init --machine red` creates `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/red.yaml` and uses the derived stack name `boxman-red`. It refuses to overwrite the file. The generated template includes all six required instance values as CloudFormation parameter defaults. To change a box, edit those defaults or the resource definitions, then run `deploy`. `deploy` reads the defaults from the YAML and passes them as stack parameters. Keep the `Parameters` entries in the generated form so Boxman can read them.
 
-The template creates an Ubuntu EC2 instance, SSM role, security groups, and Instance Connect Endpoint. The AMI value can be a Systems Manager parameter path. Tags in `[ec2.tags]` become stack tags; `boxman ec2 deploy --tag KEY=VALUE` adds or overrides a tag for that invocation.
+The template creates an Ubuntu EC2 instance, SSM role, security groups, and Instance Connect Endpoint. The AMI value can be a Systems Manager parameter path. Tags in `[machines.red.tags]` become stack tags; `boxman ec2 deploy --tag KEY=VALUE` adds or overrides a tag for that invocation.
 
 ## Day-to-day operations
 
 ```bash
-boxman ec2 status
+boxman ec2 status                         # default machine
+boxman ec2 --machine blue status
 boxman ec2 start
 boxman ec2 stop
 boxman ec2 connect
@@ -28,12 +29,12 @@ boxman ec2 run -u myuser 'id'
 boxman ec2 ssh -u myuser
 boxman ec2 ssh -u myuser -c my-container
 boxman ec2 ssh-config -u myuser
-boxman ec2 ssh-config -u myuser --alias mybox --herdr
+boxman ec2 --machine red ssh-config -u myuser --herdr
 ssh mybox
 ```
 
-Both SSH commands generate a dedicated local key pair when needed and install the public key in the remote user's `authorized_keys` using SSM. `ssh-config` writes a marked host block to `~/.ssh/config`, so OpenSSH tools and VS Code Remote SSH can use the alias. The alias defaults to the configured `stack_name`; pass `--alias` when you want a different local name. `--herdr` then runs `herdr machine add` for that same alias, which prepares the remote Herdr server and saves the machine locally. You can pass `--key-path PATH` to choose the key pair. Re-run `ssh-config` after an instance replacement.
+Both SSH commands generate a dedicated local key pair when needed and install the public key in the remote user's `authorized_keys` using SSM. `ssh-config` writes a marked host block to `~/.ssh/config`, so OpenSSH tools and VS Code Remote SSH can use the alias. The alias defaults to the selected machine name; pass `--alias` when you want a different local name. `--herdr` then runs `herdr machine add` for that same alias, which prepares the remote Herdr server and saves the machine locally. You can pass `--key-path PATH` to choose the key pair. Re-run `ssh-config` after an instance replacement.
 
 ## More than one box
 
-Create another TOML file with another `stack_name` and run commands with `boxman ec2 --config PATH ...`. Each stack name gets its own YAML file in the boxman config directory. An alias passed to `ssh-config` is local to your SSH config; choose distinct aliases for boxes you want to keep available together.
+Add another `[machines.blue]` or `[machines.green]` table and run commands with `boxman ec2 --machine blue ...`. Each machine gets its own YAML file and derived stack in the boxman config directory. An alias passed to `ssh-config` is local to your SSH config; choose distinct aliases for boxes you want to keep available together.

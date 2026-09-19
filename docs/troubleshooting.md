@@ -2,11 +2,11 @@
 
 ## `init` says the template already exists
 
-`init` deliberately preserves existing edits. Open `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/<stack_name>.yaml` and change the parameter defaults there. Use a new stack name to create another box.
+`init` deliberately preserves existing edits. Open `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/red.yaml` (or the selected machine's file) and change the parameter defaults there. Use a new machine alias such as `blue` to create another box.
 
 ## `deploy` cannot find a template or default
 
-Run `boxman ec2 init` for the selected stack name. If you edited the YAML, each of the six `Parameters` entries must still have a `Default:` directly after its `Type:`. `deploy` reads those defaults and sends them to CloudFormation.
+Run `boxman ec2 --machine red init` for the selected machine. If you edited the YAML, each of the six `Parameters` entries must still have a `Default:` directly after its `Type:`. `deploy` reads those defaults and sends them to CloudFormation.
 
 ## SSM has not registered
 
