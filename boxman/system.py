@@ -7,11 +7,9 @@ import argparse
 import os
 import pwd
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
-import urllib.request
+import tomllib
 from pathlib import Path
 
 SUBID_START = 100_000
@@ -19,10 +17,6 @@ SUBID_COUNT = 65_536
 USERNAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 
 RECIPE = Path(__file__).resolve().parent / "data" / "linux-tools.toml"
-ZIPGET_URL = (
-    "https://github.com/vivainio/zipget-rs/releases/latest/download/"
-    "zipget-linux-x64-musl"
-)
 
 
 def log(message: str) -> None:
@@ -34,30 +28,12 @@ def run(*args: str, env: dict[str, str] | None = None) -> None:
     subprocess.run(args, check=True, env=env)
 
 
-def supports_system_packages(zipget: Path) -> bool:
-    result = subprocess.run(
-        (str(zipget), "recipe", "--help"),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.returncode == 0 and "--system-only" in result.stdout
-
-
-def install_zipget(temp: Path) -> Path:
-    installed = shutil.which("zipget")
-    if installed and supports_system_packages(Path(installed)):
-        return Path(installed)
-
-    zipget = temp / "zipget"
-    log(f"downloading {ZIPGET_URL}")
-    request = urllib.request.Request(ZIPGET_URL, headers={"User-Agent": "boxman"})
-    with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310
-        zipget.write_bytes(response.read())
-    zipget.chmod(0o755)
-    if not supports_system_packages(zipget):
-        sys.exit("zipget release does not support recipe --system-only yet")
-    return zipget
+def apt_packages() -> list[str]:
+    with RECIPE.open("rb") as handle:
+        packages = tomllib.load(handle).get("system_packages", {}).get("apt", [])
+    if not packages:
+        sys.exit(f"no [system_packages] apt list in {RECIPE}")
+    return packages
 
 
 def os_release() -> dict[str, str]:
@@ -153,11 +129,10 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(f"user does not exist: {username}") from None
 
     if not RECIPE.is_file():
-        sys.exit(f"missing zipget recipe: {RECIPE}")
-    with tempfile.TemporaryDirectory(prefix="linux-system-") as temp_name:
-        zipget = install_zipget(Path(temp_name))
-        apt_env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
-        run(str(zipget), "recipe", str(RECIPE), "--system-only", env=apt_env)
+        sys.exit(f"missing recipe: {RECIPE}")
+    apt_env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+    run("apt-get", "update", env=apt_env)
+    run("apt-get", "install", "-y", *apt_packages(), env=apt_env)
     run("git", "lfs", "install", "--system")
 
     if args.packages_only:

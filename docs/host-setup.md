@@ -8,11 +8,9 @@ boxman user
 boxman verify
 ```
 
-Run these commands from a Boxman checkout. `system` installs packages from the bundled `linux-tools.toml` recipe through zipget, configures Git LFS, allocates subordinate UID/GID ranges, and enables lingering for rootless Podman. Pass explicit usernames to `system` to limit user configuration, or omit them to select normal login accounts. It checks that the host is Ubuntu 24.04.
+Run these commands from a Boxman checkout. `system` installs packages from the bundled `linux-tools.toml` recipe, configures Git LFS, allocates subordinate UID/GID ranges, and enables lingering for rootless Podman. Pass explicit usernames to `system` to limit user configuration, or omit them to select normal login accounts. It checks that the host is Ubuntu 24.04.
 
 `user` installs the recipe's per-user tools, Node.js 22, Claude Code, Copilot CLI, uv, and AWS CLI. Run it as each target account, without sudo. Tool authentication is an interactive follow-up; Boxman does not copy credentials. `verify` reports installed tools and checks that Podman runs rootless.
-
-The system step needs a zipget release supporting `recipe --system-only`; it downloads zipget when a suitable one is not already installed.
 
 ## Container variant
 

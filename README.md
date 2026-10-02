@@ -25,12 +25,11 @@ boxman vault status
 
 For local development, use `uv tool install --editable .` from this checkout.
 
-`boxman system` uses zipget to install the apt packages declared in
+`boxman system` installs the apt packages declared in
 `linux-tools.toml`, sets up Git LFS, and configures rootless Podman for normal
 login users. It accepts explicit usernames, or `--packages-only` for a
-container build. It downloads zipget if no version supporting
-`recipe --system-only` is on root's PATH. A fresh install needs a released
-zipget with that option.
+container build. It installs the recipe's `[system_packages]` apt list with
+`apt-get`.
 
 `boxman user` installs the tools in the recipe, Node.js 22, Claude Code,
 Copilot CLI, and uv. Run the user step for each account.
