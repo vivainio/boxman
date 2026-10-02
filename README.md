@@ -164,7 +164,7 @@ lists names, and `tempkeys clear` removes the keyset. Names must be
 environment variable names and values must be nonempty strings. Any process
 running as Alice can potentially read these values. Kernel keyrings do not
 survive reboot, so resend the document from the laptop after a restart. Keep
-the laptop copy as the source of truth. `boxman user` installs tempkeys from PyPI and configures Git to read `GH_TOKEN` through its
+the laptop copy as the source of truth. `boxman user` installs the tempkeys release binary from GitHub and configures Git to read `GH_TOKEN` through its
 credential helper for HTTPS `github.com` remotes. A `git push` fetches the
 token when Git needs it; it is not put in the shell environment. GitHub CLI
 commands still need `tempkeys --user run -e GH_TOKEN -- gh ...` or another

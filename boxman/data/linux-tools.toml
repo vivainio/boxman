@@ -74,6 +74,12 @@ github = { repo = "dandavison/delta", asset = "x86_64-unknown-linux-musl.tar.gz"
 unzip_to = "${bin_dir}"
 files = "*/delta"
 
+[tempkeys]
+# Keyring-backed secret store and Git credential helper - https://github.com/vivainio/tempkeys
+github = { repo = "vivainio/tempkeys", asset = "x86_64-unknown-linux-gnu" }
+save_as = "${bin_dir}/tempkeys"
+executable = true
+
 [aws-cli]
 # AWS CLI v2 - official installer
 url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"

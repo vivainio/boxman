@@ -192,7 +192,6 @@ def main() -> None:
         install_copilot(temp)
         install_uv(temp)
 
-    run(str(LOCAL_BIN / "uv"), "tool", "install", "--upgrade", "tempkeys")
     configure_git_credentials()
 
     log("user setup complete; authenticate claude, copilot, and gh interactively")
