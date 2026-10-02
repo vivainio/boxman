@@ -319,6 +319,14 @@ def stage_package(alias: str) -> tuple[Path, str]:
     return Path(remote_dir), remote_dir
 
 
+# Hosts may not reach PyPI, so install Boxman from the wheel attached to its latest GitHub release.
+INSTALL_BOXMAN = (
+    'set -e; d=$(mktemp -d); trap \'rm -rf "$d"\' EXIT; cd "$d"; '
+    '"$HOME/.local/bin/zipget" github vivainio/boxman -a py3-none-any.whl; '
+    '"$HOME/.local/bin/uv" tool install --upgrade "boxman[ec2] @ file://$d/$(ls boxman-*.whl)"'
+)
+
+
 def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
     remote_dir, remote_path = stage_package(bootstrap_alias)
     python_path = shlex.quote(str(remote_dir))
@@ -331,7 +339,7 @@ def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
         remote_ssh(bootstrap_alias, create_user)
         remote_ssh(bootstrap_alias, f"sudo env PYTHONPATH={python_path} python3 -m boxman.cli system {user}")
         remote_ssh(target_alias, f"env PYTHONPATH={python_path} python3 -m boxman.cli user")
-        remote_ssh(target_alias, "\"$HOME/.local/bin/uv\" tool install --upgrade 'boxman[ec2]'")
+        remote_ssh(target_alias, INSTALL_BOXMAN)
         remote_ssh(target_alias, f"env PYTHONPATH={python_path} python3 -m boxman.cli verify")
     finally:
         remote_ssh(bootstrap_alias, f"rm -rf {shlex.quote(remote_path)}")
