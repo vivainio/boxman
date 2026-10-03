@@ -15,6 +15,7 @@
 | `boxman ec2 deploy` | Create or update the CloudFormation stack |
 | `boxman ec2 status` | Show instance state and SSM registration |
 | `boxman ec2 start` / `stop` | Start or stop the instance and wait |
+| `boxman ec2 destroy [--yes] [--keep-local]` | Delete the stack with its instance and volume, then the local files |
 | `boxman ec2 connect [-u USER]` | Start an interactive SSM session |
 | `boxman ec2 run [-u USER] COMMAND` | Run a command through SSM without a terminal |
 | `boxman ec2 setup --user USER [--bootstrap-user BOOTSTRAP]` | Bootstrap the remote host and create/configure USER through EIC SSH |

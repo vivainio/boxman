@@ -119,6 +119,7 @@ boxman ec2 status                         # uses default_machine (red)
 boxman ec2 --machine blue status
 boxman ec2 start
 boxman ec2 stop
+boxman ec2 destroy   # deletes the stack, instance and volume
 boxman ec2 connect -u myuser
 boxman ec2 setup --user alice
 boxman ec2 ssh -u myuser

@@ -49,6 +49,27 @@ Owner = "someone"
             with self.assertRaisesRegex(SystemExit, "vpc-id"):
                 ec2.init_stack("sample", {})
 
+    def test_remove_local_files_deletes_only_this_machines_files(self) -> None:
+        with tempfile.TemporaryDirectory() as home, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": home + "/cfg", "HOME": home}):
+            ssh = Path(home) / ".ssh"
+            ssh.mkdir()
+            ec2.write_ssh_config("other", "Host other\n    User x")
+            ec2.write_ssh_config("blue", "Host blue\n    User a")
+            ec2.write_ssh_config("blue-bootstrap", "Host blue-bootstrap\n    User b")
+            for name in ("boxman-blue-ed25519", "boxman-blue-ed25519.pub", "boxman-other-ed25519"):
+                (ssh / name).write_text("key")
+            ec2.init_stack("blue", {key: "1" for key in ec2.PARAMETERS})
+            ec2.init_stack("other", {key: "1" for key in ec2.PARAMETERS})
+            removed = ec2.remove_local_files("blue", "boxman-blue")
+            config = (ssh / "config").read_text()
+            self.assertIn("Host other", config)
+            self.assertNotIn("Host blue", config)
+            self.assertTrue((ssh / "boxman-other-ed25519").exists())
+            self.assertFalse((ssh / "boxman-blue-ed25519").exists())
+            self.assertFalse(ec2.stack_template("blue").exists())
+            self.assertTrue(ec2.stack_template("other").exists())
+            self.assertEqual(len(removed), 5)
+
     def test_register_herdr_prepares_named_machine(self) -> None:
         with patch.object(ec2.shutil, "which", return_value="/usr/bin/herdr"), patch.object(ec2.subprocess, "run") as run:
             ec2.register_herdr("my-box", "alice")

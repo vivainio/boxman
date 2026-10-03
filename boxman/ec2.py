@@ -261,6 +261,35 @@ def write_ssh_config(alias: str, body: str) -> None:
     path.chmod(0o600)
 
 
+def remove_ssh_config(alias: str) -> bool:
+    """Remove the marked block that write_ssh_config added; report whether one existed."""
+    path = Path.home() / ".ssh" / "config"
+    if not path.exists():
+        return False
+    begin, end = f"# boxman:{alias} begin", f"# boxman:{alias} end"
+    pattern = re.compile(r"\n?" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", re.DOTALL)
+    content = path.read_text()
+    updated = pattern.sub("", content, count=1)
+    if updated == content:
+        return False
+    path.write_text(updated)
+    return True
+
+
+def remove_local_files(machine: str, stack: str) -> list[Path | str]:
+    """Delete the local stack template, SSH config blocks and generated key pair for a machine."""
+    removed: list[Path | str] = []
+    key = Path.home() / ".ssh" / f"boxman-{machine}-ed25519"
+    for path in (stack_template(machine), key, key.with_name(key.name + ".pub")):
+        if path.exists():
+            path.unlink()
+            removed.append(path)
+    for alias in dict.fromkeys((machine, f"{machine}-bootstrap", stack)):
+        if remove_ssh_config(alias):
+            removed.append(f"ssh config block {alias}")
+    return removed
+
+
 def register_herdr(alias: str, user: str) -> None:
     """Prepare the remote Herdr server and save the SSH machine locally."""
     if shutil.which("herdr") is None:
@@ -374,6 +403,9 @@ def main(argv: list[str]) -> None:
     setup = sub.add_parser("setup", help="set up the remote host through SSH")
     setup.add_argument("-u", "--user", required=True, help="Unix account to create or configure")
     setup.add_argument("--bootstrap-user", default="ubuntu", help="existing account used for the initial SSH connection (default: ubuntu)")
+    destroy = sub.add_parser("destroy", help="delete the stack, including the instance and its volume, and the local files for this machine")
+    destroy.add_argument("--yes", action="store_true", help="do not ask for confirmation")
+    destroy.add_argument("--keep-local", action="store_true", help="keep the local stack template, SSH config and key")
     proxy_command = sub.add_parser("proxy", help=argparse.SUPPRESS)
     proxy_command.add_argument("--instance-id", required=True)
     proxy_command.add_argument("--user", required=True)
@@ -463,6 +495,24 @@ def main(argv: list[str]) -> None:
                 f"Host {alias}\n    HostName {instance}\n    User {user}\n    IdentityFile {key}\n    ProxyCommand {target_tunnel}",
             )
             setup_host(bootstrap_alias, alias, user)
+            return
+        if args.action == "destroy":
+            if stack(cfn, name):
+                if not args.yes:
+                    if not os.isatty(0):
+                        raise SystemExit("destroy deletes the instance and its volume; pass --yes to confirm")
+                    answer = input(f"Delete stack {name} with its instance and volume? Type {conf['machine']} to confirm: ")
+                    if answer.strip() != conf["machine"]:
+                        raise SystemExit("Cancelled.")
+                cfn.delete_stack(StackName=name)
+                cfn.get_waiter("stack_delete_complete").wait(StackName=name)
+                print(f"Deleted stack {name}")
+            else:
+                print(f"Stack {name} does not exist")
+            if not args.keep_local:
+                for item in remove_local_files(conf["machine"], name):
+                    print(f"Removed {item}")
+                print(f"The [machines.{conf['machine']}] entry in the TOML config was left in place.")
             return
         instance = instance_id(cfn, name)
         if args.action == "status":

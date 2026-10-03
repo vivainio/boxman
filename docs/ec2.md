@@ -15,12 +15,15 @@ boxman ec2 status                         # default machine
 boxman ec2 --machine blue status
 boxman ec2 start
 boxman ec2 stop
+boxman ec2 destroy
 boxman ec2 connect
 boxman ec2 connect -u myuser
 boxman ec2 run 'uname -a'
 boxman ec2 run -u myuser 'id'
 boxman ec2 setup --user alice
 ```
+
+`destroy` deletes the CloudFormation stack and waits for it: the instance, its root volume (which is deleted with the instance), the Instance Connect Endpoint, the security groups and the IAM role are all removed, and the data on the disk is lost. It asks you to type the machine name unless you pass `--yes`. It then removes the machine's local stack template, its `# boxman:` blocks in `~/.ssh/config` and its generated key pair; pass `--keep-local` to keep those. The `[machines.NAME]` entry in the TOML config stays. `stop` keeps the volume, which still costs storage.
 
 `status` reports EC2 state and SSM registration. `start` and `stop` wait for the instance state change. `connect -u` starts a session as `ssm-user` and uses `sudo -iu` to enter the chosen account. `run` executes through SSM Run Command as root unless `-u` is supplied; it prints status and output and exits with an error when the remote command fails.
 
