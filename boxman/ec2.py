@@ -479,7 +479,22 @@ INSTALL_BOXMAN = (
 )
 
 
-def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
+LAYOUT_STATE = "$HOME/.local/state/boxman"
+
+
+def start_layout(alias: str, layout: Path) -> None:
+    """Copy a layout file to the host and start `boxman layout apply` detached with nohup."""
+    remote_ssh(alias, f'mkdir -p "{LAYOUT_STATE}"')
+    subprocess.run(["scp", str(layout), f"{alias}:.local/state/boxman/layout.yaml"], check=True)
+    remote_ssh(
+        alias,
+        f'nohup "$HOME/.local/bin/boxman" layout apply "{LAYOUT_STATE}/layout.yaml" '
+        f'> "{LAYOUT_STATE}/layout.log" 2>&1 < /dev/null &',
+    )
+    print(f"Cloning started on {alias}; follow it with: ssh {alias} tail -f .local/state/boxman/layout.log")
+
+
+def setup_host(bootstrap_alias: str, target_alias: str, user: str, layout: Path | None = None) -> None:
     remote_dir, remote_path = stage_package(bootstrap_alias)
     python_path = shlex.quote(str(remote_dir))
     try:
@@ -495,6 +510,8 @@ def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
         remote_ssh(target_alias, f"env PYTHONPATH={python_path} python3 -m boxman.cli verify")
     finally:
         remote_ssh(bootstrap_alias, f"rm -rf {shlex.quote(remote_path)}")
+    if layout:
+        start_layout(target_alias, layout)
 
 
 def main(argv: list[str]) -> None:
@@ -527,6 +544,7 @@ def main(argv: list[str]) -> None:
     setup = sub.add_parser("setup", help="set up the remote host through SSH")
     setup.add_argument("-u", "--user", required=True, help="Unix account to create or configure")
     setup.add_argument("--bootstrap-user", default="ubuntu", help="existing account used for the initial SSH connection (default: ubuntu)")
+    setup.add_argument("--layout", type=Path, help="layout YAML file; repositories are cloned in the background after setup")
     destroy = sub.add_parser("destroy", help="delete the stack, including the instance and its volume, and the local files for this machine")
     destroy.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     destroy.add_argument("--keep-local", action="store_true", help="keep the local stack template, SSH config and key")
@@ -629,7 +647,9 @@ def main(argv: list[str]) -> None:
                 alias,
                 f"Host {alias}\n    HostName {instance}\n    User {user}\n    IdentityFile {key}\n    ProxyCommand {target_tunnel}",
             )
-            setup_host(bootstrap_alias, alias, user)
+            if args.layout and not args.layout.is_file():
+                raise SystemExit(f"Layout file not found: {args.layout}")
+            setup_host(bootstrap_alias, alias, user, args.layout)
             return
         if args.action == "destroy":
             if stack(cfn, name):

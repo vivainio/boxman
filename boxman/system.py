@@ -16,6 +16,9 @@ SUBID_START = 100_000
 SUBID_COUNT = 65_536
 USERNAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 
+GROUP = "boxman"
+SHARED_DIR = Path("/srv/boxman")
+
 RECIPE = Path(__file__).resolve().parent / "data" / "linux-tools.toml"
 
 
@@ -80,6 +83,25 @@ def ensure_subid(username: str, path: Path, flag: str) -> None:
     run("usermod", flag, f"{start}-{end}", username)
 
 
+def ensure_shared_dir(users: list[str]) -> None:
+    """Create the boxman group and the setgid /srv/boxman directory it owns."""
+    if subprocess.run(("getent", "group", GROUP), capture_output=True).returncode != 0:
+        run("groupadd", "--system", GROUP)
+    for username in users:
+        run("usermod", "-aG", GROUP, username)
+    SHARED_DIR.mkdir(parents=True, exist_ok=True)
+    run("chgrp", GROUP, str(SHARED_DIR))
+    run("chmod", "2775", str(SHARED_DIR))
+    pattern = f"{SHARED_DIR}/*"
+    known = subprocess.run(
+        ("git", "config", "--system", "--get-all", "safe.directory"),
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    if pattern not in known:
+        run("git", "config", "--system", "--add", "safe.directory", pattern)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -138,6 +160,8 @@ def main(argv: list[str] | None = None) -> None:
     if args.packages_only:
         log("package-only system setup complete")
         return
+
+    ensure_shared_dir(users)
 
     for username in users:
         log(f"configuring rootless Podman prerequisites for {username}")

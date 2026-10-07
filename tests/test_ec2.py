@@ -106,6 +106,16 @@ Owner = "someone"
         self.assertIn(("red", ec2.INSTALL_BOXMAN), commands)
         self.assertIn(("red", "env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli verify"), commands)
 
+    def test_setup_host_starts_layout_with_nohup(self) -> None:
+        with patch.object(ec2, "stage_package", return_value=(Path("/tmp/x"), "/tmp/x")), patch.object(ec2, "remote_ssh") as remote, patch.object(ec2.subprocess, "run") as run:
+            ec2.setup_host("red-bootstrap", "red", "alice", Path("layout.yaml"))
+        self.assertEqual(run.call_args.args[0], ["scp", "layout.yaml", "red:.local/state/boxman/layout.yaml"])
+        last = remote.call_args_list[-1].args
+        self.assertEqual(last[0], "red")
+        self.assertTrue(last[1].startswith("nohup "))
+        self.assertTrue(last[1].endswith("&"))
+        self.assertIn("layout apply", last[1])
+
 
 if __name__ == "__main__":
     unittest.main()

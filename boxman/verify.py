@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import grp
+import os
 import shutil
 import subprocess
 
@@ -58,6 +60,18 @@ def main() -> None:
             print("OK       rootless Podman")
         else:
             print("FAILED   Podman is not running rootless")
+            failures += 1
+
+    try:
+        gid = grp.getgrnam("boxman").gr_gid
+    except KeyError:
+        print("FAILED   group boxman does not exist (run sudo boxman system)")
+        failures += 1
+    else:
+        if gid in os.getgroups():
+            print("OK       group boxman")
+        else:
+            print("FAILED   not in active group boxman (log in again after boxman system)")
             failures += 1
 
     raise SystemExit(failures)

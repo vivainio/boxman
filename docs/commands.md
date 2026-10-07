@@ -24,3 +24,36 @@
 | `boxman ec2 secrets send FILE -u USER` | Upload a local JSON secrets document over SSH |
 
 Use `boxman ec2 --help` and `boxman ec2 ACTION --help` for option details. EC2 global options go before `ACTION`.
+
+## boxman layout
+
+`boxman system` creates the `boxman` group, adds the login users to it, and
+makes `/srv/boxman` group-owned with mode `2775` (setgid) so shared checkouts
+stay writable by every user in the group.
+
+`boxman layout apply FILE` clones the repositories described by a YAML file
+into `/srv/boxman`. Clones run in parallel (`-j N`, default 4) into `/srv/boxman/.partial` and are
+renamed into place when finished, so an interrupted run can simply be repeated:
+finished repositories are skipped and stale partial clones are discarded. If the group was added after the current login began, the command
+re-runs itself under `sg boxman`. Patterns need an authenticated `gh`.
+
+```yaml
+ref: main                      # optional default branch or tag
+depth: 1                       # optional default clone depth (0 = full)
+repos:
+  - repo: vivainio/boxman      # literal GitHub owner/name
+  - repo: company/foo-*        # pattern over names in one owner
+    exclude: [foo-old]
+    into: services             # subdirectory of /srv/boxman
+    include_archived: false    # archived repos are skipped by default
+  - url: https://git.example.com/x/y.git
+    path: tools/y              # explicit path, literal entries only
+    ref: dev
+```
+
+`boxman ec2 setup -u USER --layout FILE` copies the file to the host and starts
+`boxman layout apply` there with `nohup`, logging to
+`~/.local/state/boxman/layout.log`; setup returns without waiting for the clones.
+
+Patterns skip forks and archived repositories. Each clone gets
+`core.sharedRepository=group`. Paths that escape `/srv/boxman` are rejected.
