@@ -1,0 +1,3 @@
+miniformat mfloader.py, vendored from https://github.com/vivainio/miniformat
+release v0.2.0 (commit 7a07f54). Only change: __version__ set to 0.2.0, as the release CI does.
+Do not edit; copy a newer file over it.

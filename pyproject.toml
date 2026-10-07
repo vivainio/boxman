@@ -35,7 +35,7 @@ ec2 = ["boto3>=1.34"]
 boxman = "boxman.cli:main"
 
 [tool.setuptools]
-packages = ["boxman", "boxman.data"]
+packages = ["boxman", "boxman._vendor", "boxman.data"]
 
 [tool.setuptools.package-data]
 boxman = ["data/*.toml", "data/*.yaml", "data/*.md"]

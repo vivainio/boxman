@@ -15,10 +15,10 @@ import shutil
 import subprocess
 import sys
 import threading
-import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
+from boxman._vendor import mfloader
 from boxman.system import GROUP, SHARED_DIR
 
 REEXEC_FLAG = "BOXMAN_LAYOUT_SG"
@@ -68,14 +68,13 @@ def expand(entry: dict, defaults: dict) -> list[dict]:
         return [{"url": f"https://github.com/{spec}.git", "path": safe_path(name), "ref": ref, "depth": depth}]
     if "path" in entry:
         sys.exit(f"{spec}: use 'into', not 'path', with a pattern")
-    exclude = set(entry.get("exclude", []))
     into = safe_path(entry["into"]) if entry.get("into") else ""
     repos = []
     for found in github_repos(owner):
         name = found["name"]
-        if not fnmatch.fnmatchcase(name, pattern) or name in exclude:
+        if not fnmatch.fnmatchcase(name, pattern):
             continue
-        if found["isFork"] or (found["isArchived"] and not entry.get("include_archived")):
+        if found["isFork"] or (found["isArchived"] and not entry.get("include_archived", defaults.get("include_archived"))):
             continue
         repos.append(
             {
@@ -90,23 +89,75 @@ def expand(entry: dict, defaults: dict) -> list[dict]:
     return repos
 
 
+def slug(repo: dict) -> str:
+    """owner/name for GitHub repos (what `!` entries match against), else the URL."""
+    return repo["url"].removeprefix("https://github.com/").removesuffix(".git")
+
+
+DEFAULTABLE = ("ref", "depth", "include_archived")
+
+
+def convert(entry: dict) -> dict:
+    """Give an entry typed options: miniformat reads every scalar as a string."""
+    out = {}
+    for key in ("repo", "url", "path", "into", "ref", "depth", "include_archived"):
+        value = entry.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            sys.exit(f"{key} must be a string, got {value!r}")
+        if key == "depth":
+            if not value.isdigit():
+                sys.exit(f"depth must be a number, got {value!r}")
+            value = int(value)
+        elif key == "include_archived":
+            if value not in ("true", "false"):
+                sys.exit(f"include_archived must be true or false, got {value!r}")
+            value = value == "true"
+        out[key] = value
+    unknown = set(entry) - set(out) - {"repo", "url"}
+    if unknown:
+        sys.exit(f"unknown option(s) {sorted(unknown)} in {entry}")
+    return out
+
+
 def load_layout(path: Path) -> list[dict]:
-    """Parse a layout file into a flat, de-duplicated list of repos to clone."""
+    """Parse a layout file into a flat, de-duplicated list of repos to clone.
+
+    The file is miniformat (YAML syntax; every scalar is a string): a list of entries,
+    or a map with `repos` plus the defaults `ref`, `depth` and `include_archived`.
+    An entry is a URL, `owner/name`, `owner/pattern`, `!pattern` (remove earlier
+    matches) or a map with `repo`/`url` and options. `#+include FILE` works too.
+    """
     try:
-        document = tomllib.loads(path.read_text())
-    except tomllib.TOMLDecodeError as exc:
+        with path.open() as handle:
+            document = mfloader.load(handle)
+    except mfloader.MiniFormatError as exc:
         sys.exit(f"{path}: {exc}")
+    if isinstance(document, list):
+        document = {"repos": document}
     entries = document.get("repos")
     if not entries:
         sys.exit(f"no repos in {path}")
+    if unknown := set(document) - set(DEFAULTABLE) - {"repos"}:
+        sys.exit(f"{path}: unknown key(s) {sorted(unknown)}")
+    defaults = convert({k: v for k, v in document.items() if k != "repos"})
     repos: list[dict] = []
-    seen: set[str] = set()
     for entry in entries:
-        for repo in expand(entry, document):
-            if repo["path"] in seen:
-                sys.exit(f"duplicate repo path: {repo['path']}")
-            seen.add(repo["path"])
-            repos.append(repo)
+        if isinstance(entry, str) and entry.startswith("!"):
+            pattern = entry[1:]
+            repos = [r for r in repos if not fnmatch.fnmatchcase(slug(r), pattern)]
+            continue
+        if isinstance(entry, str):
+            entry = {"url": entry} if "://" in entry or entry.startswith("git@") else {"repo": entry}
+        elif not isinstance(entry, dict):
+            sys.exit(f"{path}: repos entries must be strings or maps, got {entry!r}")
+        repos.extend(expand(convert(entry), defaults))
+    seen: set[str] = set()
+    for repo in repos:
+        if repo["path"] in seen:
+            sys.exit(f"duplicate repo path: {repo['path']}")
+        seen.add(repo["path"])
     return repos
 
 
@@ -149,7 +200,7 @@ def clone(repo: dict) -> None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["apply"])
-    parser.add_argument("file", type=Path, help="layout TOML file")
+    parser.add_argument("file", type=Path, help="layout file")
     parser.add_argument("-j", "--jobs", type=int, default=4, help="parallel clones (default: 4)")
     return parser.parse_args(argv)
 

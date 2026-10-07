@@ -31,30 +31,52 @@ Use `boxman ec2 --help` and `boxman ec2 ACTION --help` for option details. EC2 g
 makes `/srv/boxman` group-owned with mode `2775` (setgid) so shared checkouts
 stay writable by every user in the group.
 
-`boxman layout apply FILE` clones the repositories described by a TOML file
+`boxman layout apply FILE` clones the repositories described by a layout file
 into `/srv/boxman`. Clones run in parallel (`-j N`, default 4) into `/srv/boxman/.partial` and are
 renamed into place when finished, so an interrupted run can simply be repeated:
 finished repositories are skipped and stale partial clones are discarded. If the group was added after the current login began, the command
 re-runs itself under `sg boxman`. Patterns need an authenticated `gh`.
 
-```toml
-ref = "main"                      # optional default branch or tag
-depth = 1                         # optional default clone depth (0 = full)
+The file is [miniformat](https://github.com/vivainio/miniformat): YAML syntax with
+every scalar a string (so `depth: 1` and `include_archived: true` are converted by
+Boxman, and `no` or `1.10` stay as written). It is a list of entries, or a map with
+`repos` plus the defaults `ref` (branch or tag), `depth` (clone depth, 0 = full) and
+`include_archived`.
 
-[[repos]]
-repo = "vivainio/boxman"          # literal GitHub owner/name
-
-[[repos]]
-repo = "company/foo-*"            # pattern over names in one owner
-exclude = ["foo-old"]             # exact names
-into = "services"                 # subdirectory of /srv/boxman
-include_archived = false          # archived repos are skipped by default
-
-[[repos]]
-url = "https://git.example.com/x/y.git"
-path = "tools/y"                  # explicit path, literal entries only
-ref = "dev"
+```yaml
+- company/foo-*
+- company/bar-*
+- "!company/foo-old"
+- vivainio/boxman
 ```
+
+An entry is a string:
+
+- `owner/name` — one GitHub repository
+- `owner/pattern` — every repository of that owner matching the glob
+- `https://…` or `git@…` — any Git URL
+- `!pattern` — remove earlier matches; the glob is matched against `owner/name`
+
+Plain scalars cannot start with `*` or `!`, so quote those (`"!company/foo-old"`,
+`"*/x"`). A string that needs options is a map instead, with `repo` or `url` and any
+of `into` (subdirectory of `/srv/boxman`, for patterns), `path` (explicit path, for
+literal entries), `ref`, `depth`, `include_archived`:
+
+```yaml
+ref: main
+depth: 1
+repos:
+  - company/foo-*
+  - repo: company/svc-*
+    into: services
+    include_archived: true
+  - url: https://git.example.com/x/y.git
+    path: tools/y
+    ref: dev
+```
+
+A line `#+include other.yaml` is replaced by that file's text, so a layout can be split up
+or shared; see the miniformat README for the details. Errors name the line.
 
 `boxman ec2 setup -u USER --layout FILE` copies the file to the host and starts
 `boxman layout apply` there with `nohup`, logging to

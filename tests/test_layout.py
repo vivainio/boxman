@@ -25,13 +25,13 @@ class LayoutTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def load(self, text: str) -> list[dict]:
-        path = self.tmp / "layout.toml"
+        path = self.tmp / "layout.yaml"
         path.write_text(text)
         return layout.load_layout(path)
 
     def test_literal_url_and_default_ref(self) -> None:
         repos = self.load(
-            'ref = "main"\n[[repos]]\nrepo = "me/boxman"\n[[repos]]\nurl = "https://h/x/y.git"\npath = "tools/y"\nref = "dev"\n'
+            "ref: main\nrepos:\n  - me/boxman\n  - url: https://h/x/y.git\n    path: tools/y\n    ref: dev\n"
         )
         self.assertEqual(
             repos,
@@ -41,38 +41,51 @@ class LayoutTest(unittest.TestCase):
             ],
         )
 
-    def test_glob_skips_excluded_archived_and_forks(self) -> None:
-        repos = self.load('[[repos]]\nrepo = "co/foo-*"\nexclude = ["foo-old"]\ninto = "services"\n')
-        self.assertEqual([r["path"] for r in repos], ["services/foo-a", "services/foo-b"])
+    def test_bare_list_of_strings(self) -> None:
+        repos = self.load("- co/foo-*\n- me/boxman\n- https://h/x/y.git\n")
+        self.assertEqual([r["path"] for r in repos], ["foo-a", "foo-b", "foo-old", "boxman", "y"])
+
+    def test_negation_removes_earlier_matches(self) -> None:
+        repos = self.load('- co/foo-*\n- "!co/foo-old"\n- "!*/foo-b"\n- me/boxman\n')
+        self.assertEqual([r["path"] for r in repos], ["foo-a", "boxman"])
+
+    def test_glob_skips_archived_and_forks(self) -> None:
+        repos = self.load("- repo: co/foo-*\n  into: services\n")
+        self.assertEqual([r["path"] for r in repos], ["services/foo-a", "services/foo-b", "services/foo-old"])
 
     def test_glob_can_include_archived(self) -> None:
-        repos = self.load('[[repos]]\nrepo = "co/foo-*"\ninclude_archived = true\n')
-        self.assertIn("foo-dead", [r["path"] for r in repos])
+        self.assertIn("foo-dead", [r["path"] for r in self.load("- repo: co/foo-*\n  include_archived: true\n")])
+        self.assertIn("foo-dead", [r["path"] for r in self.load("include_archived: true\nrepos:\n  - co/foo-*\n")])
 
     def test_depth_default_and_override(self) -> None:
-        repos = self.load('depth = 1\n[[repos]]\nrepo = "a/x"\n[[repos]]\nrepo = "a/y"\ndepth = 0\n')
+        repos = self.load("depth: 1\nrepos:\n  - a/x\n  - repo: a/y\n    depth: 0\n")
         self.assertEqual([r["depth"] for r in repos], [1, 0])
+
+    def test_include_pulls_in_another_file(self) -> None:
+        (self.tmp / "more.yaml").write_text("- co/foo-*\n")
+        self.assertEqual(len(self.load("- me/boxman\n#+include more.yaml\n")), 4)
 
     def test_rejects_bad_entries(self) -> None:
         for entry in (
-            'repo = "co/x"\npath = "../x"',
-            'repo = "co/x"\npath = "/etc/x"',
-            'repo = "co/x"\npath = ".partial/x"',
-            'repo = "co/foo-*"\ninto = ".."',
-            'repo = "co/foo-*"\npath = "x"',
-            'repo = "bare"',
-            'repo = "*/x"',
+            "- repo: co/x\n  path: ../x",
+            "- repo: co/x\n  path: /etc/x",
+            "- repo: co/x\n  path: .partial/x",
+            "- repo: co/foo-*\n  into: ..",
+            "- repo: co/foo-*\n  path: x",
+            "- repo: co/x\n  depth: many",
+            "- repo: co/x\n  include_archived: maybe",
+            "- repo: co/x\n  bogus: 1",
+            "- bare",
+            '- "*/x"',
+            "bogus: 1\nrepos:\n  - a/x",
         ):
             with self.subTest(entry=entry), self.assertRaises(SystemExit):
-                self.load(f"[[repos]]\n{entry}\n")
+                self.load(entry + "\n")
 
-    def test_rejects_duplicates_and_empty(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.load('[[repos]]\nrepo = "a/x"\n[[repos]]\nrepo = "b/x"\n')
-        with self.assertRaises(SystemExit):
-            self.load("")
-        with self.assertRaises(SystemExit):
-            self.load("repos: [")
+    def test_rejects_duplicates_empty_and_bad_syntax(self) -> None:
+        for text in ("- a/x\n- b/x\n", "repos:\n", "", "- a/x: b\n", "- *a/x\n"):
+            with self.subTest(text=text), self.assertRaises(SystemExit):
+                self.load(text)
 
     def test_clone_uses_partial_dir_then_renames(self) -> None:
         calls = []
