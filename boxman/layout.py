@@ -15,10 +15,9 @@ import shutil
 import subprocess
 import sys
 import threading
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
-
-import yaml
 
 from boxman.system import GROUP, SHARED_DIR
 
@@ -93,7 +92,10 @@ def expand(entry: dict, defaults: dict) -> list[dict]:
 
 def load_layout(path: Path) -> list[dict]:
     """Parse a layout file into a flat, de-duplicated list of repos to clone."""
-    document = yaml.safe_load(path.read_text()) or {}
+    try:
+        document = tomllib.loads(path.read_text())
+    except tomllib.TOMLDecodeError as exc:
+        sys.exit(f"{path}: {exc}")
     entries = document.get("repos")
     if not entries:
         sys.exit(f"no repos in {path}")
@@ -147,7 +149,7 @@ def clone(repo: dict) -> None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["apply"])
-    parser.add_argument("file", type=Path, help="layout YAML file")
+    parser.add_argument("file", type=Path, help="layout TOML file")
     parser.add_argument("-j", "--jobs", type=int, default=4, help="parallel clones (default: 4)")
     return parser.parse_args(argv)
 

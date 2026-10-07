@@ -370,6 +370,19 @@ def proxy(settings_: dict) -> str:
     )
 
 
+def host_block(alias: str, instance: str, user: str, key: Path, tunnel: str) -> str:
+    """The `Host` block written to ~/.ssh/config.
+
+    accept-new records the key of a host seen for the first time, so ssh does not stop
+    to ask without a terminal. The host name is the instance id, so a replaced instance
+    is a new host and cannot trigger a changed-key refusal.
+    """
+    return (
+        f"Host {alias}\n    HostName {instance}\n    User {user}\n    IdentityFile {key}\n"
+        f"    StrictHostKeyChecking accept-new\n    ProxyCommand {tunnel}"
+    )
+
+
 def write_ssh_config(alias: str, body: str) -> None:
     if not ALIAS.fullmatch(alias):
         raise SystemExit("Alias may contain letters, numbers, dot, underscore and hyphen")
@@ -485,10 +498,13 @@ LAYOUT_STATE = "$HOME/.local/state/boxman"
 def start_layout(alias: str, layout: Path) -> None:
     """Copy a layout file to the host and start `boxman layout apply` detached with nohup."""
     remote_ssh(alias, f'mkdir -p "{LAYOUT_STATE}"')
-    subprocess.run(["scp", str(layout), f"{alias}:.local/state/boxman/layout.yaml"], check=True)
+    subprocess.run(["scp", str(layout), f"{alias}:.local/state/boxman/layout.toml"], check=True)
+    boxman = '"$HOME/.local/bin/boxman"'
+    # `gh repo list` (glob entries) reads GH_TOKEN; take it from the tempkeys keyset when unset
+    token = f'GH_TOKEN="${{GH_TOKEN:-$({boxman} secrets read GH_TOKEN 2>/dev/null)}}"'
     remote_ssh(
         alias,
-        f'nohup "$HOME/.local/bin/boxman" layout apply "{LAYOUT_STATE}/layout.yaml" '
+        f'{token} nohup {boxman} layout apply "{LAYOUT_STATE}/layout.toml" '
         f'> "{LAYOUT_STATE}/layout.log" 2>&1 < /dev/null &',
     )
     print(f"Cloning started on {alias}; follow it with: ssh {alias} tail -f .local/state/boxman/layout.log")
@@ -544,7 +560,10 @@ def main(argv: list[str]) -> None:
     setup = sub.add_parser("setup", help="set up the remote host through SSH")
     setup.add_argument("-u", "--user", required=True, help="Unix account to create or configure")
     setup.add_argument("--bootstrap-user", default="ubuntu", help="existing account used for the initial SSH connection (default: ubuntu)")
-    setup.add_argument("--layout", type=Path, help="layout YAML file; repositories are cloned in the background after setup")
+    setup.add_argument("--layout", type=Path, help="layout TOML file; repositories are cloned in the background after setup")
+    layout = sub.add_parser("layout", help="copy a layout file to a host that is already set up and start cloning in the background")
+    layout.add_argument("file", type=Path, help="layout TOML file")
+    layout.add_argument("--alias", help="SSH host name written by setup (default: the machine name)")
     destroy = sub.add_parser("destroy", help="delete the stack, including the instance and its volume, and the local files for this machine")
     destroy.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     destroy.add_argument("--keep-local", action="store_true", help="keep the local stack template, SSH config and key")
@@ -589,6 +608,11 @@ def main(argv: list[str]) -> None:
         except ValueError as exc:
             raise SystemExit("--volume-size-gb must be an integer") from exc
         print(f"Created {init_stack(conf['machine'], values)}")
+        return
+    if args.action == "layout":
+        if not args.file.is_file():
+            raise SystemExit(f"Layout file not found: {args.file}")
+        start_layout(args.alias or conf["machine"], args.file)
         return
     try:
         import boto3
@@ -638,15 +662,9 @@ def main(argv: list[str]) -> None:
             alias = conf["machine"]
             bootstrap_alias = alias if bootstrap_user == user else f"{alias}-bootstrap"
             bootstrap_tunnel = proxy({**conf, "ssh_user": bootstrap_user, "key_path": key})
-            write_ssh_config(
-                bootstrap_alias,
-                f"Host {bootstrap_alias}\n    HostName {instance}\n    User {bootstrap_user}\n    IdentityFile {key}\n    ProxyCommand {bootstrap_tunnel}",
-            )
+            write_ssh_config(bootstrap_alias, host_block(bootstrap_alias, instance, bootstrap_user, key, bootstrap_tunnel))
             target_tunnel = proxy({**conf, "ssh_user": user, "key_path": key})
-            write_ssh_config(
-                alias,
-                f"Host {alias}\n    HostName {instance}\n    User {user}\n    IdentityFile {key}\n    ProxyCommand {target_tunnel}",
-            )
+            write_ssh_config(alias, host_block(alias, instance, user, key, target_tunnel))
             if args.layout and not args.layout.is_file():
                 raise SystemExit(f"Layout file not found: {args.layout}")
             setup_host(bootstrap_alias, alias, user, args.layout)
@@ -699,7 +717,7 @@ def main(argv: list[str]) -> None:
                 subprocess.run(cmd, check=True)
             else:
                 alias = args.alias or name
-                write_ssh_config(alias, f"Host {alias}\n    HostName {instance}\n    User {user}\n    IdentityFile {key}\n    ProxyCommand {tunnel}")
+                write_ssh_config(alias, host_block(alias, instance, user, key, tunnel))
                 print(f"SSH host {alias} configured for {user}@{instance}")
                 if args.herdr:
                     register_herdr(alias, user)

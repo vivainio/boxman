@@ -108,13 +108,35 @@ Owner = "someone"
 
     def test_setup_host_starts_layout_with_nohup(self) -> None:
         with patch.object(ec2, "stage_package", return_value=(Path("/tmp/x"), "/tmp/x")), patch.object(ec2, "remote_ssh") as remote, patch.object(ec2.subprocess, "run") as run:
-            ec2.setup_host("red-bootstrap", "red", "alice", Path("layout.yaml"))
-        self.assertEqual(run.call_args.args[0], ["scp", "layout.yaml", "red:.local/state/boxman/layout.yaml"])
+            ec2.setup_host("red-bootstrap", "red", "alice", Path("layout.toml"))
+        self.assertEqual(run.call_args.args[0], ["scp", "layout.toml", "red:.local/state/boxman/layout.toml"])
         last = remote.call_args_list[-1].args
         self.assertEqual(last[0], "red")
-        self.assertTrue(last[1].startswith("nohup "))
+        self.assertIn(" nohup ", last[1])
+        self.assertIn("secrets read GH_TOKEN", last[1])
         self.assertTrue(last[1].endswith("&"))
         self.assertIn("layout apply", last[1])
+
+    def test_host_block_accepts_new_host_keys(self) -> None:
+        block = ec2.host_block("red", "i-123", "alice", Path("/k"), "tunnel cmd")
+        self.assertIn("Host red\n", block)
+        self.assertIn("HostName i-123", block)
+        self.assertIn("StrictHostKeyChecking accept-new", block)
+        self.assertTrue(block.endswith("ProxyCommand tunnel cmd"))
+
+    def test_layout_cli_starts_layout_on_the_machine_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}), patch.object(ec2, "start_layout") as start:
+            layout = Path(directory) / "layout.toml"
+            layout.write_text("repos = []\n")
+            (Path(directory) / "boxman").mkdir()
+            (Path(directory) / "boxman" / "ec2.toml").write_text('[machines.red]\nprofile = "p"\nregion = "r"\n')
+            ec2.main(["--machine", "red", "layout", str(layout)])
+            start.assert_called_once_with("red", layout)
+            start.reset_mock()
+            ec2.main(["--machine", "red", "layout", str(layout), "--alias", "box"])
+            start.assert_called_once_with("box", layout)
+            with self.assertRaisesRegex(SystemExit, "not found"):
+                ec2.main(["--machine", "red", "layout", str(layout.with_name("missing.toml"))])
 
 
 if __name__ == "__main__":

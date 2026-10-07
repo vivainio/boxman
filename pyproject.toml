@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: System :: Systems Administration",
 ]
 requires-python = ">=3.11"
-dependencies = ["pyyaml>=6"]
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/vivainio/boxman"
