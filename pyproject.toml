@@ -38,4 +38,4 @@ boxman = "boxman.cli:main"
 packages = ["boxman", "boxman.data"]
 
 [tool.setuptools.package-data]
-boxman = ["data/*.toml", "data/*.yaml"]
+boxman = ["data/*.toml", "data/*.yaml", "data/*.md"]

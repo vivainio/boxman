@@ -109,3 +109,86 @@ Owner = "someone"
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeClient:
+    def __init__(self, pages: dict) -> None:
+        self.pages = pages
+
+    def get_paginator(self, operation: str):
+        pages = self.pages
+
+        class Paginator:
+            def paginate(self, **kwargs):
+                if isinstance(pages[operation], Exception):
+                    raise pages[operation]
+                return [pages[operation]]
+
+        return Paginator()
+
+
+class FakeSession:
+    region_name = "eu-west-1"
+    profile_name = "p"
+
+    def __init__(self, ec2: dict, cfn: dict) -> None:
+        self.clients = {"ec2": FakeClient(ec2), "cloudformation": FakeClient(cfn)}
+
+    def client(self, name: str):
+        return self.clients[name]
+
+
+class DiscoverTests(unittest.TestCase):
+    def test_summarizes_account(self) -> None:
+        ec2_pages = {
+            "describe_vpcs": {"Vpcs": [{"VpcId": "vpc-1", "CidrBlock": "10.0.0.0/16", "IsDefault": True}]},
+            "describe_subnets": {"Subnets": [
+                {"SubnetId": "s-priv", "VpcId": "vpc-1", "AvailabilityZone": "a", "CidrBlock": "10.0.1.0/24", "AvailableIpAddressCount": 200},
+                {"SubnetId": "s-pub", "VpcId": "vpc-1", "AvailabilityZone": "b", "CidrBlock": "10.0.2.0/24", "AvailableIpAddressCount": 50},
+            ]},
+            "describe_route_tables": {"RouteTables": [
+                {"VpcId": "vpc-1", "Associations": [{"Main": True}], "Routes": []},
+                {"VpcId": "vpc-1", "Associations": [{"SubnetId": "s-pub"}], "Routes": [{"GatewayId": "igw-1"}]},
+            ]},
+            "describe_instances": {"Reservations": [{"Instances": [
+                {"InstanceId": "i-1", "State": {"Name": "running"}, "InstanceType": "t3.small", "SubnetId": "s-pub", "VpcId": "vpc-1",
+                 "ImageId": "ami-1", "Tags": [{"Key": "Name", "Value": "box"}, {"Key": "Owner", "Value": "me"}],
+                 "BlockDeviceMappings": [{"Ebs": {"VolumeId": "vol-1"}}]},
+                {"InstanceId": "i-2", "State": {"Name": "terminated"}, "InstanceType": "t3.small"},
+            ]}]},
+            "describe_volumes": {"Volumes": [{"VolumeId": "vol-1", "Size": 40}]},
+        }
+        cfn_pages = {"list_stacks": {"StackSummaries": [
+            {"StackName": "boxman-red", "StackStatus": "CREATE_COMPLETE"},
+            {"StackName": "other", "StackStatus": "CREATE_COMPLETE"},
+        ]}}
+        result = ec2.discover(FakeSession(ec2_pages, cfn_pages))
+        subnets = {s["id"]: s for s in result["vpcs"][0]["subnets"]}
+        self.assertTrue(subnets["s-pub"]["public"])
+        self.assertFalse(subnets["s-priv"]["public"])
+        self.assertEqual([i["id"] for i in result["instances"]], ["i-1"])
+        self.assertEqual(result["instances"][0]["volume_gb"], 40)
+        self.assertEqual(result["boxman_stacks"], [{"name": "boxman-red", "status": "CREATE_COMPLETE"}])
+        self.assertEqual(result["tag_keys"]["Owner"], ["me"])
+        self.assertEqual(result["suggested_init_values"]["subnet_id"], "s-pub")
+
+    def test_unreadable_section_becomes_warning(self) -> None:
+        empty = {k: {v: []} for k, v in [
+            ("describe_vpcs", "Vpcs"), ("describe_subnets", "Subnets"), ("describe_route_tables", "RouteTables"),
+            ("describe_instances", "Reservations"), ("describe_volumes", "Volumes"),
+        ]}
+        result = ec2.discover(FakeSession(empty, {"list_stacks": RuntimeError("denied")}))
+        self.assertEqual(result["warnings"], ["stacks: denied"])
+        self.assertIsNone(result["suggested_init_values"])
+
+
+class SkillTests(unittest.TestCase):
+    def test_skill_command_prints_skill(self) -> None:
+        import io
+        from contextlib import redirect_stdout
+        from boxman import cli
+
+        out = io.StringIO()
+        with patch.object(cli.sys, "argv", ["boxman", "skill"]), redirect_stdout(out):
+            cli.main()
+        self.assertTrue(out.getvalue().startswith("---\nname: boxman"))

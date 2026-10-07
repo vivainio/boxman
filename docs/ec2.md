@@ -8,6 +8,10 @@ The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has `[
 
 The template creates an Ubuntu EC2 instance, SSM role, security groups, and Instance Connect Endpoint. The AMI value can be a Systems Manager parameter path. Tags in `[machines.red.tags]` become stack tags; `boxman ec2 deploy --tag KEY=VALUE` adds or overrides a tag for that invocation.
 
+## Discovering account values
+
+`boxman ec2 --profile PROFILE discover` prints read-only JSON about the account: VPCs with their subnets (public or private, free IPs), existing instances with their types, volume sizes and tags, existing `boxman-*` stacks, tag keys in use, and suggested `init` values. `--region` is optional when the profile defines one. Sections the profile cannot read are listed under `warnings` instead of failing the command. It is meant for scripts and AI agents; `boxman skill` prints a getting-started skill describing the whole workflow.
+
 ## Day-to-day operations
 
 ```bash

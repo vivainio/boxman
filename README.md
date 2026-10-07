@@ -110,6 +110,8 @@ and tags. Command-line options override the file;
 file. Put global options before the action:
 
 ```bash
+boxman ec2 --profile your-aws-profile discover   # JSON: VPCs, subnets, instances, tags
+boxman skill                                      # print a getting-started skill for AI agents
 boxman ec2 --machine red init --vpc-id vpc-... --subnet-id subnet-... \
   --instance-type t3.xlarge --volume-size-gb 100 \
   --instance-name mybox \

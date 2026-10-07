@@ -99,7 +99,7 @@ def claude(args: list[str]) -> None:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        fail("Usage: boxman {system|user|vault|claude|secrets|verify|ec2} ...")
+        fail("Usage: boxman {system|user|vault|claude|secrets|verify|ec2|skill} ...")
     command, *args = sys.argv[1:]
     if command == "system":
         from boxman import system
@@ -131,8 +131,14 @@ def main() -> None:
         from boxman import verify
 
         verify.main()
+    elif command == "skill":
+        if args:
+            fail("Usage: boxman skill")
+        import importlib.resources
+
+        sys.stdout.write(importlib.resources.files("boxman").joinpath("data/SKILL.md").read_text())
     else:
-        fail("Usage: boxman {system|user|vault|claude|secrets|verify|ec2} ...")
+        fail("Usage: boxman {system|user|vault|claude|secrets|verify|ec2|skill} ...")
 
 
 if __name__ == "__main__":

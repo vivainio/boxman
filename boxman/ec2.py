@@ -128,6 +128,129 @@ def settings(args: argparse.Namespace) -> dict:
     return result
 
 
+UBUNTU_AMI = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+
+
+def name_tag(tags: list[dict] | None) -> str | None:
+    return next((t["Value"] for t in tags or [] if t["Key"] == "Name"), None)
+
+
+def paginate(client, operation: str, key: str, **kwargs) -> list:
+    items = []
+    for page in client.get_paginator(operation).paginate(**kwargs):
+        items.extend(page[key])
+    return items
+
+
+def discover(session) -> dict:
+    """Read-only survey of the account: VPCs, subnets, instances and boxman stacks."""
+    ec2 = session.client("ec2")
+    warnings = []
+
+    def section(label: str, fn, default):
+        try:
+            return fn()
+        except Exception as exc:  # a missing permission must not hide the other sections
+            warnings.append(f"{label}: {getattr(exc, 'response', {}).get('Error', {}).get('Message', exc)}")
+            return default
+
+    vpcs = section("vpcs", lambda: paginate(ec2, "describe_vpcs", "Vpcs"), [])
+    subnets = section("subnets", lambda: paginate(ec2, "describe_subnets", "Subnets"), [])
+    tables = section("route tables", lambda: paginate(ec2, "describe_route_tables", "RouteTables"), [])
+    reservations = section("instances", lambda: paginate(ec2, "describe_instances", "Reservations"), [])
+    volumes = section("volumes", lambda: paginate(ec2, "describe_volumes", "Volumes"), [])
+    stacks = section(
+        "stacks",
+        lambda: [
+            s for s in paginate(
+                session.client("cloudformation"), "list_stacks", "StackSummaries",
+                StackStatusFilter=[
+                    "CREATE_IN_PROGRESS", "CREATE_COMPLETE", "ROLLBACK_COMPLETE", "UPDATE_COMPLETE",
+                    "UPDATE_IN_PROGRESS", "UPDATE_ROLLBACK_COMPLETE", "ROLLBACK_FAILED", "DELETE_FAILED",
+                ],
+            ) if s["StackName"].startswith("boxman-")
+        ],
+        [],
+    )
+
+    def has_igw_route(table: dict) -> bool:
+        return any(str(r.get("GatewayId", "")).startswith("igw-") for r in table["Routes"])
+
+    explicit = {a["SubnetId"]: t for t in tables for a in t["Associations"] if a.get("SubnetId")}
+    main = {a_t["VpcId"]: a_t for a_t in tables if any(a.get("Main") for a in a_t["Associations"])}
+
+    def is_public(subnet: dict) -> bool:
+        table = explicit.get(subnet["SubnetId"]) or main.get(subnet["VpcId"])
+        return bool(table and has_igw_route(table))
+
+    sizes = {v["VolumeId"]: v["Size"] for v in volumes}
+    instances = []
+    for reservation in reservations:
+        for item in reservation["Instances"]:
+            if item["State"]["Name"] == "terminated":
+                continue
+            disks = [sizes.get(m["Ebs"]["VolumeId"]) for m in item.get("BlockDeviceMappings", []) if "Ebs" in m]
+            instances.append({
+                "id": item["InstanceId"],
+                "name": name_tag(item.get("Tags")),
+                "state": item["State"]["Name"],
+                "type": item["InstanceType"],
+                "vpc_id": item.get("VpcId"),
+                "subnet_id": item.get("SubnetId"),
+                "ami_id": item.get("ImageId"),
+                "volume_gb": disks[0] if disks else None,
+                "tags": {t["Key"]: t["Value"] for t in item.get("Tags", [])},
+            })
+
+    result_vpcs = []
+    for vpc in vpcs:
+        result_vpcs.append({
+            "id": vpc["VpcId"],
+            "name": name_tag(vpc.get("Tags")),
+            "cidr": vpc["CidrBlock"],
+            "default": vpc["IsDefault"],
+            "subnets": [
+                {
+                    "id": s["SubnetId"],
+                    "name": name_tag(s.get("Tags")),
+                    "az": s["AvailabilityZone"],
+                    "cidr": s["CidrBlock"],
+                    "public": is_public(s),
+                    "free_ips": s["AvailableIpAddressCount"],
+                }
+                for s in subnets if s["VpcId"] == vpc["VpcId"]
+            ],
+        })
+
+    tag_keys: dict[str, list[str]] = {}
+    for item in instances:
+        for key, value in item["tags"].items():
+            if not key.startswith("aws:") and value not in tag_keys.setdefault(key, []):
+                tag_keys[key].append(value)
+
+    suggestion = None
+    candidates = [v for v in result_vpcs if v["default"]] or (result_vpcs if len(result_vpcs) == 1 else [])
+    if candidates and candidates[0]["subnets"]:
+        vpc = candidates[0]
+        subnet = max(vpc["subnets"], key=lambda s: (s["public"], s["free_ips"]))
+        suggestion = {
+            "vpc_id": vpc["id"],
+            "subnet_id": subnet["id"],
+            "ami_id": UBUNTU_AMI,
+            "note": "Picked the default (or only) VPC and its public subnet with most free IPs; review before use.",
+        }
+    return {
+        "region": session.region_name,
+        "profile": session.profile_name,
+        "vpcs": result_vpcs,
+        "instances": instances,
+        "boxman_stacks": [{"name": s["StackName"], "status": s["StackStatus"]} for s in stacks],
+        "tag_keys": tag_keys,
+        "suggested_init_values": suggestion,
+        "warnings": warnings,
+    }
+
+
 def stack(cfn, name: str):
     try:
         return cfn.describe_stacks(StackName=name)["Stacks"][0]
@@ -381,6 +504,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--region")
     parser.add_argument("--machine", help="machine alias such as red, blue, or green")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("discover", help="print JSON describing the account's VPCs, subnets, instances, tags and boxman stacks (read-only)")
     sub.add_parser("init", help="create a local stack template under the boxman config directory")
     init = sub.choices["init"]
     for key in PARAMETERS:
@@ -426,6 +550,17 @@ def main(argv: list[str]) -> None:
             username(args.user),
             args.key_path,
         )
+        return
+    if args.action == "discover":
+        try:
+            import boto3
+            import botocore.exceptions
+        except ImportError as exc:
+            raise SystemExit("EC2 commands require boto3; install boxman with the ec2 extra") from exc
+        try:
+            print(json.dumps(discover(boto3.Session(profile_name=args.profile, region_name=args.region)), indent=2))
+        except botocore.exceptions.BotoCoreError as exc:
+            raise SystemExit(f"AWS error: {exc}") from exc
         return
     conf = settings(args)
     if args.action == "init":
