@@ -90,7 +90,7 @@ def expand(entry: dict, defaults: dict) -> list[dict]:
 
 
 def slug(repo: dict) -> str:
-    """owner/name for GitHub repos (what `!` entries match against), else the URL."""
+    """owner/name for GitHub repos (what exclude patterns match against), else the URL."""
     return repo["url"].removeprefix("https://github.com/").removesuffix(".git")
 
 
@@ -121,44 +121,60 @@ def convert(entry: dict) -> dict:
     return out
 
 
-def load_layout(path: Path) -> list[dict]:
-    """Parse a layout file into a flat, de-duplicated list of repos to clone.
+def load_layout(path: Path) -> tuple[Path, list[dict]]:
+    """Parse a layout file into the clone directory and a flat, de-duplicated list of repos.
 
-    The file is miniformat (YAML syntax; every scalar is a string): a list of entries,
-    or a map with `repos` plus the defaults `ref`, `depth` and `include_archived`.
-    An entry is a URL, `owner/name`, `owner/pattern`, `!pattern` (remove earlier
-    matches) or a map with `repo`/`url` and options. `#+include FILE` works too.
+    The file is miniformat (YAML syntax; every scalar is a string): a map with `repos`
+    plus `dir` (where to clone, default /srv/boxman) and the defaults `ref`, `depth` and
+    `include_archived`. `repos` is a map
+    `{include: [...], exclude: [...]}`; exclude patterns (globs on `owner/name`) remove
+    matches from the whole include list. An include entry is a URL, `owner/name`,
+    `owner/pattern` or a map with `repo`/`url` and options. `#+include FILE` works too.
     """
     try:
         with path.open() as handle:
             document = mfloader.load(handle)
     except mfloader.MiniFormatError as exc:
         sys.exit(f"{path}: {exc}")
-    if isinstance(document, list):
-        document = {"repos": document}
-    entries = document.get("repos")
+    if not isinstance(document, dict):
+        sys.exit(f"{path}: expected a map with a `repos` key")
+    if unknown := set(document) - set(DEFAULTABLE) - {"repos", "dir"}:
+        sys.exit(f"{path}: unknown key(s) {sorted(unknown)}")
+    root = SHARED_DIR
+    if "dir" in document:
+        value = document["dir"]
+        root = Path(value).expanduser() if isinstance(value, str) else None
+        if root is None or not root.is_absolute():
+            sys.exit(f"{path}: dir must be an absolute path (or start with ~), got {value!r}")
+    block = document.get("repos")
+    if not isinstance(block, dict):
+        sys.exit(f"{path}: repos must be a map with `include` and optional `exclude` lists")
+    if unknown := set(block) - {"include", "exclude"}:
+        sys.exit(f"{path}: unknown key(s) {sorted(unknown)} in repos")
+    entries = block.get("include")
+    excludes = block.get("exclude") or []
     if not entries:
         sys.exit(f"no repos in {path}")
-    if unknown := set(document) - set(DEFAULTABLE) - {"repos"}:
-        sys.exit(f"{path}: unknown key(s) {sorted(unknown)}")
-    defaults = convert({k: v for k, v in document.items() if k != "repos"})
+    if not isinstance(entries, list):
+        sys.exit(f"{path}: repos.include must be a list")
+    if not isinstance(excludes, list) or not all(isinstance(p, str) for p in excludes):
+        sys.exit(f"{path}: repos.exclude must be a list of patterns")
+    defaults = convert({k: v for k, v in document.items() if k not in ("repos", "dir")})
     repos: list[dict] = []
     for entry in entries:
-        if isinstance(entry, str) and entry.startswith("!"):
-            pattern = entry[1:]
-            repos = [r for r in repos if not fnmatch.fnmatchcase(slug(r), pattern)]
-            continue
         if isinstance(entry, str):
             entry = {"url": entry} if "://" in entry or entry.startswith("git@") else {"repo": entry}
         elif not isinstance(entry, dict):
-            sys.exit(f"{path}: repos entries must be strings or maps, got {entry!r}")
+            sys.exit(f"{path}: repos.include entries must be strings or maps, got {entry!r}")
         repos.extend(expand(convert(entry), defaults))
+    for pattern in excludes:
+        repos = [r for r in repos if not fnmatch.fnmatchcase(slug(r), pattern)]
     seen: set[str] = set()
     for repo in repos:
         if repo["path"] in seen:
             sys.exit(f"duplicate repo path: {repo['path']}")
         seen.add(repo["path"])
-    return repos
+    return root, repos
 
 
 def ensure_group_active() -> None:
@@ -176,13 +192,13 @@ def ensure_group_active() -> None:
     os.execvp("sg", ["sg", GROUP, "-c", command])
 
 
-def clone(repo: dict) -> None:
+def clone(repo: dict, root: Path) -> None:
     """Clone into a partial directory and rename on success, so reruns can resume."""
-    target = SHARED_DIR / repo["path"]
+    target = root / repo["path"]
     if target.exists():
         log(f"skipping {repo['path']}: already cloned")
         return
-    partial = SHARED_DIR / PARTIAL / repo["path"].replace("/", "__")
+    partial = root / PARTIAL / repo["path"].replace("/", "__")
     partial.parent.mkdir(exist_ok=True)
     shutil.rmtree(partial, ignore_errors=True)
     command = ["git", "-c", "core.sharedRepository=group", "clone"]
@@ -207,10 +223,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    repos = load_layout(args.file)
-    ensure_group_active()
-    if not SHARED_DIR.is_dir() or not os.access(SHARED_DIR, os.W_OK):
-        sys.exit(f"{SHARED_DIR} is not writable; run `sudo boxman system` first")
+    root, repos = load_layout(args.file)
+    if root == SHARED_DIR:
+        ensure_group_active()
+        if not root.is_dir() or not os.access(root, os.W_OK):
+            sys.exit(f"{root} is not writable; run `sudo boxman system` first")
+    else:
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            sys.exit(f"cannot create {root}: {error}")
+        if not os.access(root, os.W_OK):
+            sys.exit(f"{root} is not writable")
     os.umask(0o002)
     done = 0
     failures = 0
@@ -219,7 +243,7 @@ def main(argv: list[str] | None = None) -> None:
     def work(repo: dict) -> None:
         nonlocal done, failures
         try:
-            clone(repo)
+            clone(repo, root)
             outcome = "done"
         except (OSError, subprocess.CalledProcessError) as error:
             outcome = f"FAILED: {error}"

@@ -39,41 +39,52 @@ re-runs itself under `sg boxman`. Patterns need an authenticated `gh`.
 
 The file is [miniformat](https://github.com/vivainio/miniformat): YAML syntax with
 every scalar a string (so `depth: 1` and `include_archived: true` are converted by
-Boxman, and `no` or `1.10` stay as written). It is a list of entries, or a map with
-`repos` plus the defaults `ref` (branch or tag), `depth` (clone depth, 0 = full) and
-`include_archived`.
+Boxman, and `no` or `1.10` stay as written). It is a map with `repos` plus the
+optional keys `dir` (where to clone; an absolute path or one starting with `~`,
+default `/srv/boxman`) and the defaults `ref` (branch or tag), `depth` (clone depth,
+0 = full) and `include_archived`. `repos` is itself a map with an `include` list and an
+optional `exclude` list:
 
 ```yaml
-- company/foo-*
-- company/bar-*
-- "!company/foo-old"
-- vivainio/boxman
+dir: /srv/boxman
+repos:
+  include:
+    - company/*
+    - vivainio/boxman
+  exclude:
+    - company/*-docs
 ```
 
-An entry is a string:
+Each `exclude` entry is a glob matched against `owner/name`. It removes matches from
+the whole `include` list, wherever it is written, so ordering never matters.
+
+An include entry is a string:
 
 - `owner/name` — one GitHub repository
 - `owner/pattern` — every repository of that owner matching the glob
 - `https://…` or `git@…` — any Git URL
-- `!pattern` — remove earlier matches; the glob is matched against `owner/name`
 
-Plain scalars cannot start with `*` or `!`, so quote those (`"!company/foo-old"`,
-`"*/x"`). A string that needs options is a map instead, with `repo` or `url` and any
-of `into` (subdirectory of `/srv/boxman`, for patterns), `path` (explicit path, for
-literal entries), `ref`, `depth`, `include_archived`:
+Plain scalars cannot start with `*`, so quote those (`"*/x"`). A string that needs
+options is a map instead, with `repo` or `url` and any of `into` (subdirectory of the
+clone directory, for patterns), `path` (explicit path, for literal entries), `ref`,
+`depth`, `include_archived`:
 
 ```yaml
 ref: main
 depth: 1
 repos:
-  - company/foo-*
-  - repo: company/svc-*
-    into: services
-    include_archived: true
-  - url: https://git.example.com/x/y.git
-    path: tools/y
-    ref: dev
+  include:
+    - company/foo-*
+    - repo: company/svc-*
+      into: services
+      include_archived: true
+    - url: https://git.example.com/x/y.git
+      path: tools/y
+      ref: dev
 ```
+
+With the default `dir`, run `sudo boxman system` first. A custom `dir` is created if it
+does not exist and must be writable by the current user.
 
 A line `#+include other.yaml` is replaced by that file's text, so a layout can be split up
 or shared; see the miniformat README for the details. Errors name the line.
@@ -83,4 +94,4 @@ or shared; see the miniformat README for the details. Errors name the line.
 `~/.local/state/boxman/layout.log`; setup returns without waiting for the clones.
 
 Patterns skip forks and archived repositories. Each clone gets
-`core.sharedRepository=group`. Paths that escape `/srv/boxman` are rejected.
+`core.sharedRepository=group`. Paths that escape the clone directory are rejected.
