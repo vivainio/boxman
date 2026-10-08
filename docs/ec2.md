@@ -2,7 +2,7 @@
 
 ## Local files
 
-The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has `[machines.red]`, `[machines.blue]`, or `[machines.green]` tables with `profile`, `region`, and optional `tags`. Set `[ec2].default_machine` to choose the default. Use `--machine NAME` to override it, and `--config PATH` to select another machine collection. Instead of the TOML file, `--config FILE` can name a [layout file](commands.md) (any file not ending in `.toml`) with an `ec2` map, so one company-specific file holds the whole box:
+The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has `[machines.red]`, `[machines.blue]`, or `[machines.green]` tables with `profile`, `region`, and optional `tags`. Set `[ec2].default_machine` to choose the default. Use `--machine NAME` to override it, and `--config PATH` to select another machine collection. Instead of the TOML file, `--config FILE` can name a [layout file](commands.md) (any file not ending in `.toml`) with an `ec2` map, so one file holds the whole box:
 
 ```yaml
 ec2:
