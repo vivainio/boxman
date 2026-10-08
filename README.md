@@ -107,7 +107,7 @@ The config contains no credentials; AWS uses the named profile. Supply the tags
 required by your account. The TOML file selects the AWS profile, region, stack,
 and tags. Command-line options override the file;
 `--tag KEY=VALUE` adds or overrides a tag. `--config PATH` selects another TOML
-file. Put global options before the action:
+file, or a layout file with an `ec2` map that replaces the TOML file (see docs/ec2.md). Put global options before the action:
 
 ```bash
 boxman ec2 --profile your-aws-profile discover   # JSON: VPCs, subnets, instances, tags

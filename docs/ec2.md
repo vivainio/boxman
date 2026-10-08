@@ -2,7 +2,28 @@
 
 ## Local files
 
-The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has `[machines.red]`, `[machines.blue]`, or `[machines.green]` tables with `profile`, `region`, and optional `tags`. Set `[ec2].default_machine` to choose the default. Use `--machine NAME` to override it, and `--config PATH` to select another machine collection. Global options such as `--config`, `--machine`, `--profile`, and `--region` go **before** the action.
+The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has `[machines.red]`, `[machines.blue]`, or `[machines.green]` tables with `profile`, `region`, and optional `tags`. Set `[ec2].default_machine` to choose the default. Use `--machine NAME` to override it, and `--config PATH` to select another machine collection. Instead of the TOML file, `--config FILE` can name a [layout file](commands.md) (any file not ending in `.toml`) with an `ec2` map, so one company-specific file holds the whole box:
+
+```yaml
+ec2:
+  machine: red
+  profile: your-aws-profile
+  region: your-region
+  vpc_id: vpc-...
+  subnet_id: subnet-...
+  instance_type: m7i.xlarge
+  volume_size_gb: 200
+  instance_name: red
+  ami_id: ami-...
+  tags:
+    Owner: your-owner
+repos:
+  dir: /srv/boxman
+  include:
+    - company/*
+```
+
+`machine` is the machine name (`--machine` overrides it). `init` takes `vpc_id`, `subnet_id`, `instance_type`, `volume_size_gb`, `instance_name` and `ami_id` from the file unless you pass the matching option. `boxman layout apply` ignores the `ec2` map. Unknown `ec2` keys are rejected. Global options such as `--config`, `--machine`, `--profile`, and `--region` go **before** the action.
 
 `init --machine red` creates `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/red.yaml` and uses the derived stack name `boxman-red`. It refuses to overwrite the file. The generated template includes all six required instance values as CloudFormation parameter defaults. To change a box, edit those defaults or the resource definitions, then run `deploy`. `deploy` reads the defaults from the YAML and passes them as stack parameters. Keep the `Parameters` entries in the generated form so Boxman can read them.
 

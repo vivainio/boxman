@@ -40,14 +40,15 @@ re-runs itself under `sg boxman`. Patterns need an authenticated `gh`.
 The file is [miniformat](https://github.com/vivainio/miniformat): YAML syntax with
 every scalar a string (so `depth: 1` and `include_archived: true` are converted by
 Boxman, and `no` or `1.10` stay as written). It is a map with `repos` plus the
-optional keys `dir` (where to clone; an absolute path or one starting with `~`,
-default `/srv/boxman`) and the defaults `ref` (branch or tag), `depth` (clone depth,
-0 = full) and `include_archived`. `repos` is itself a map with an `include` list and an
-optional `exclude` list:
+optional key `ec2` (machine settings used by `boxman ec2 --config FILE`; see
+[EC2](ec2.md)) and the defaults `ref` (branch or tag), `depth` (clone depth,
+0 = full) and `include_archived`. `repos` is itself a map with an `include` list, an
+optional `exclude` list and an optional `dir`, where the repositories are cloned (an
+absolute path or one starting with `~`, default `/srv/boxman`):
 
 ```yaml
-dir: /srv/boxman
 repos:
+  dir: /srv/boxman
   include:
     - company/*
     - vivainio/boxman

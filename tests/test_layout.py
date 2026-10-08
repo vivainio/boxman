@@ -53,14 +53,17 @@ class LayoutTest(unittest.TestCase):
         body = "repos:\n  include:\n    - me/boxman\n"
         path.write_text(body)
         self.assertEqual(layout.load_layout(path)[0], layout.SHARED_DIR)
-        path.write_text("dir: /work/src\n" + body)
+        path.write_text("repos:\n  dir: /work/src\n  include:\n    - me/boxman\n")
         self.assertEqual(layout.load_layout(path)[0], Path("/work/src"))
-        path.write_text("dir: ~/src\n" + body)
+        path.write_text("repos:\n  dir: ~/src\n  include:\n    - me/boxman\n")
         self.assertEqual(layout.load_layout(path)[0], Path.home() / "src")
-        for bad in ("dir: src\n", "dir:\n  - /x\n"):
-            path.write_text(bad + body)
+        for bad in ("  dir: src\n", "  dir:\n    - /x\n"):
+            path.write_text("repos:\n" + bad + "  include:\n    - me/boxman\n")
             with self.subTest(bad=bad), self.assertRaises(SystemExit):
                 layout.load_layout(path)
+        path.write_text("dir: /work/src\n" + body)
+        with self.assertRaises(SystemExit):
+            layout.load_layout(path)
 
     def test_exclude_applies_to_all_includes(self) -> None:
         repos = self.load(

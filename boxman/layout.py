@@ -5,10 +5,8 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import grp
 import json
 import os
-import pwd
 import re
 import shlex
 import shutil
@@ -121,16 +119,8 @@ def convert(entry: dict) -> dict:
     return out
 
 
-def load_layout(path: Path) -> tuple[Path, list[dict]]:
-    """Parse a layout file into the clone directory and a flat, de-duplicated list of repos.
-
-    The file is miniformat (YAML syntax; every scalar is a string): a map with `repos`
-    plus `dir` (where to clone, default /srv/boxman) and the defaults `ref`, `depth` and
-    `include_archived`. `repos` is a map
-    `{include: [...], exclude: [...]}`; exclude patterns (globs on `owner/name`) remove
-    matches from the whole include list. An include entry is a URL, `owner/name`,
-    `owner/pattern` or a map with `repo`/`url` and options. `#+include FILE` works too.
-    """
+def read_document(path: Path) -> dict:
+    """Read a layout file (miniformat) into its top-level map."""
     try:
         with path.open() as handle:
             document = mfloader.load(handle)
@@ -138,19 +128,35 @@ def load_layout(path: Path) -> tuple[Path, list[dict]]:
         sys.exit(f"{path}: {exc}")
     if not isinstance(document, dict):
         sys.exit(f"{path}: expected a map with a `repos` key")
-    if unknown := set(document) - set(DEFAULTABLE) - {"repos", "dir"}:
+    return document
+
+
+def load_layout(path: Path) -> tuple[Path, list[dict]]:
+    """Parse a layout file into the clone directory and a flat, de-duplicated list of repos.
+
+    The file is miniformat (YAML syntax; every scalar is a string): a map with `repos`
+    plus `ec2` (read by `boxman ec2`, ignored
+    here) and the defaults `ref`, `depth` and
+    `include_archived`. `repos` is a map
+    `{dir: PATH, include: [...], exclude: [...]}` (`dir` is where to clone, default
+    /srv/boxman); exclude patterns (globs on `owner/name`) remove
+    matches from the whole include list. An include entry is a URL, `owner/name`,
+    `owner/pattern` or a map with `repo`/`url` and options. `#+include FILE` works too.
+    """
+    document = read_document(path)
+    if unknown := set(document) - set(DEFAULTABLE) - {"repos", "ec2"}:
         sys.exit(f"{path}: unknown key(s) {sorted(unknown)}")
-    root = SHARED_DIR
-    if "dir" in document:
-        value = document["dir"]
-        root = Path(value).expanduser() if isinstance(value, str) else None
-        if root is None or not root.is_absolute():
-            sys.exit(f"{path}: dir must be an absolute path (or start with ~), got {value!r}")
     block = document.get("repos")
     if not isinstance(block, dict):
         sys.exit(f"{path}: repos must be a map with `include` and optional `exclude` lists")
-    if unknown := set(block) - {"include", "exclude"}:
+    if unknown := set(block) - {"dir", "include", "exclude"}:
         sys.exit(f"{path}: unknown key(s) {sorted(unknown)} in repos")
+    root = SHARED_DIR
+    if "dir" in block:
+        value = block["dir"]
+        root = Path(value).expanduser() if isinstance(value, str) else None
+        if root is None or not root.is_absolute():
+            sys.exit(f"{path}: repos.dir must be an absolute path (or start with ~), got {value!r}")
     entries = block.get("include")
     excludes = block.get("exclude") or []
     if not entries:
@@ -159,7 +165,7 @@ def load_layout(path: Path) -> tuple[Path, list[dict]]:
         sys.exit(f"{path}: repos.include must be a list")
     if not isinstance(excludes, list) or not all(isinstance(p, str) for p in excludes):
         sys.exit(f"{path}: repos.exclude must be a list of patterns")
-    defaults = convert({k: v for k, v in document.items() if k not in ("repos", "dir")})
+    defaults = convert({k: v for k, v in document.items() if k not in ("repos", "ec2")})
     repos: list[dict] = []
     for entry in entries:
         if isinstance(entry, str):
@@ -179,6 +185,9 @@ def load_layout(path: Path) -> tuple[Path, list[dict]]:
 
 def ensure_group_active() -> None:
     """Re-run under `sg boxman` when the group was added after this login began."""
+    import grp
+    import pwd
+
     try:
         group = grp.getgrnam(GROUP)
     except KeyError:

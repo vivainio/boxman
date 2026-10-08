@@ -30,6 +30,49 @@ Owner = "someone"
             self.assertEqual(result["stack_name"], "boxman-red")
             self.assertEqual(result["tags"], {"Owner": "other"})
 
+    def layout_args(self, path: Path, action: str = "deploy", **overrides):
+        values = dict(config=path, action=action, profile=None, region=None, machine=None, tag=None)
+        return __import__("argparse").Namespace(**{**values, **overrides})
+
+    def test_layout_file_replaces_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "layout.yaml"
+            path.write_text(
+                "ec2:\n  machine: red\n  profile: example\n  region: eu-west-1\n  vpc_id: vpc-1\n"
+                "  subnet_id: subnet-1\n  volume_size_gb: 100\n  tags:\n    Owner: someone\n"
+                "repos:\n  include:\n    - me/boxman\n"
+            )
+            result = ec2.settings(self.layout_args(path, tag=["Owner=other", "Team=x"]))
+            self.assertEqual((result["machine"], result["stack_name"]), ("red", "boxman-red"))
+            self.assertEqual((result["profile"], result["region"]), ("example", "eu-west-1"))
+            self.assertEqual(result["tags"], {"Owner": "other", "Team": "x"})
+            self.assertEqual(result["values"], {"vpc_id": "vpc-1", "subnet_id": "subnet-1", "volume_size_gb": "100"})
+            self.assertEqual(ec2.settings(self.layout_args(path, machine="blue"))["stack_name"], "boxman-blue")
+
+    def test_layout_file_rejects_bad_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "layout.yaml"
+            for text in (
+                "repos:\n  include:\n    - a/x\n",
+                "ec2:\n  machine: red\n  bogus: 1\n",
+                "ec2:\n  machine: red\n  tags: x\n",
+                "ec2:\n  profile: p\n  region: r\n",
+                "ec2:\n  machine: red\n  profile: p\n",
+            ):
+                path.write_text(text)
+                with self.subTest(text=text), self.assertRaises(SystemExit):
+                    ec2.settings(self.layout_args(path))
+            with self.assertRaises(SystemExit):
+                ec2.settings(self.layout_args(Path(directory) / "missing.yaml"))
+
+    def test_layout_file_still_loads_as_layout(self) -> None:
+        from boxman import layout
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "layout.yaml"
+            path.write_text("ec2:\n  machine: red\nrepos:\n  include:\n    - me/boxman\n")
+            self.assertEqual([r["path"] for r in layout.load_layout(path)[1]], ["boxman"])
+
     def test_init_materializes_stack_beneath_xdg_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}):
             values = {"vpc_id": "vpc-1", "subnet_id": "subnet-1", "instance_type": "t3.small", "volume_size_gb": "30", "instance_name": "box", "ami_id": "ami-1"}

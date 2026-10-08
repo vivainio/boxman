@@ -80,9 +80,54 @@ def init_stack(name: str, values: dict) -> Path:
     return target
 
 
+LAYOUT_KEYS = {"machine", "profile", "region", "tags", *PARAMETERS}
+
+
+def layout_settings(args: argparse.Namespace, config_path: Path) -> dict:
+    """Read the machine settings from the `ec2` map of a layout file."""
+    from boxman import layout
+
+    ec2_config = layout.read_document(config_path).get("ec2")
+    if not isinstance(ec2_config, dict):
+        raise SystemExit(f"{config_path} has no ec2 map")
+    if unknown := set(ec2_config) - LAYOUT_KEYS:
+        raise SystemExit(f"Unknown ec2 setting(s) in {config_path}: {sorted(unknown)}")
+    tags = ec2_config.get("tags", {})
+    if not isinstance(tags, dict) or any(not isinstance(v, str) for v in tags.values()):
+        raise SystemExit("ec2.tags must be a map of strings")
+    if any(not isinstance(ec2_config.get(k, ""), str) for k in LAYOUT_KEYS - {"tags"}):
+        raise SystemExit("ec2 settings other than tags must be strings")
+    selected = machine_name(required(getattr(args, "machine", None) or ec2_config.get("machine"), "--machine or ec2.machine"))
+    result = {
+        "machine": selected,
+        "stack_name": stack_name(selected),
+        "profile": getattr(args, "profile", None) or ec2_config.get("profile"),
+        "region": getattr(args, "region", None) or ec2_config.get("region"),
+        "values": {key: ec2_config[key] for key in PARAMETERS if key in ec2_config},
+        "tags": add_tags(dict(tags), getattr(args, "tag", None)),
+    }
+    if args.action != "init":
+        result["profile"] = required(result["profile"], "--profile")
+        result["region"] = required(result["region"], "--region")
+    return result
+
+
+def add_tags(tags: dict, items: list[str] | None) -> dict:
+    for item in items or []:
+        if "=" not in item or not item.split("=", 1)[0]:
+            raise SystemExit("--tag must be KEY=VALUE")
+        key, value = item.split("=", 1)
+        tags[key] = value
+    return tags
+
+
 def settings(args: argparse.Namespace) -> dict:
     document = {}
     config_path = args.config or config_dir() / "ec2.toml"
+    if args.config and args.config.suffix != ".toml":
+        if not config_path.is_file():
+            raise SystemExit(f"Config file does not exist: {config_path}")
+        return layout_settings(args, config_path)
     if config_path.is_file():
         with config_path.open("rb") as source:
             document = tomllib.load(source)
@@ -119,12 +164,7 @@ def settings(args: argparse.Namespace) -> dict:
     tags = machine_config.get("tags", {}).copy()
     if not isinstance(tags, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in tags.items()):
         raise SystemExit("[ec2.tags] must contain string keys and values")
-    for item in getattr(args, "tag", None) or []:
-        if "=" not in item or not item.split("=", 1)[0]:
-            raise SystemExit("--tag must be KEY=VALUE")
-        key, value = item.split("=", 1)
-        tags[key] = value
-    result["tags"] = tags
+    result["tags"] = add_tags(tags, getattr(args, "tag", None))
     return result
 
 
@@ -532,7 +572,7 @@ def setup_host(bootstrap_alias: str, target_alias: str, user: str, layout: Path 
 
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="boxman ec2")
-    parser.add_argument("--config", type=Path, help="TOML file (default: $XDG_CONFIG_HOME/boxman/ec2.toml)")
+    parser.add_argument("--config", type=Path, help="TOML file, or a layout file with an ec2 map (default: $XDG_CONFIG_HOME/boxman/ec2.toml)")
     parser.add_argument("--profile")
     parser.add_argument("--region")
     parser.add_argument("--machine", help="machine alias such as red, blue, or green")
@@ -601,7 +641,7 @@ def main(argv: list[str]) -> None:
         return
     conf = settings(args)
     if args.action == "init":
-        values = {key: getattr(args, key) for key in PARAMETERS}
+        values = {key: getattr(args, key) or conf.get("values", {}).get(key) for key in PARAMETERS}
         try:
             if int(required(values["volume_size_gb"], "--volume-size-gb")) < 8:
                 raise SystemExit("--volume-size-gb must be at least 8")
@@ -685,7 +725,7 @@ def main(argv: list[str]) -> None:
             if not args.keep_local:
                 for item in remove_local_files(conf["machine"], name):
                     print(f"Removed {item}")
-                print(f"The [machines.{conf['machine']}] entry in the TOML config was left in place.")
+                print(f"The settings for {conf['machine']} in the config file were left in place.")
             return
         instance = instance_id(cfn, name)
         if args.action == "status":
