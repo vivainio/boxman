@@ -58,7 +58,7 @@ Settings several machines share (profile, region, vpc_id, subnet_id, ami_id, tag
 a file of their own, e.g. `git-machine.yaml` for a network that can reach GitHub, and each
 machine file pulls it in with `#+include git-machine.yaml` placed inside `ec2:` at the
 indent of its keys. Included text is pasted in, and duplicate keys are an error, so keep
-only shared keys in the included file. Apply the repos alone with `boxman layout apply layout.yaml`.
+only shared keys in the included file. Apply the repos alone with `boxman layout layout.yaml`.
 
 ## 3. Create and deploy the stack
 
