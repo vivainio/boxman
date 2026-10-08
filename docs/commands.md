@@ -50,10 +50,10 @@ absolute path or one starting with `~`, default `/srv/boxman`):
 repos:
   dir: /srv/boxman
   include:
-    - company/*
+    - your-org/*
     - vivainio/boxman
   exclude:
-    - company/*-docs
+    - your-org/*-docs
 ```
 
 Each `exclude` entry is a glob matched against `owner/name`. It removes matches from
@@ -75,8 +75,8 @@ ref: main
 depth: 1
 repos:
   include:
-    - company/foo-*
-    - repo: company/svc-*
+    - your-org/foo-*
+    - repo: your-org/svc-*
       into: services
       include_archived: true
     - url: https://git.example.com/x/y.git

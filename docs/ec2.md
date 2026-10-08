@@ -20,8 +20,36 @@ ec2:
 repos:
   dir: /srv/boxman
   include:
-    - company/*
+    - your-org/*
 ```
+
+One file describes one machine. Settings that several machines share, such as the account and network, go in a file of their own that each machine file pulls in with `#+include`, which splices the file's text in at the indent of the `#`. For example, `git-machine.yaml` can hold the network of a machine that can reach GitHub:
+
+```yaml
+# git-machine.yaml
+profile: your-aws-profile
+region: your-region
+vpc_id: vpc-...
+subnet_id: subnet-...
+ami_id: ami-...
+tags:
+  Owner: your-owner
+```
+
+```yaml
+# red.yaml
+ec2:
+  machine: red
+  instance_type: m7i.xlarge
+  volume_size_gb: 200
+  instance_name: red
+  #+include git-machine.yaml
+repos:
+  include:
+    - your-org/*
+```
+
+Run it as `boxman ec2 --config red.yaml ...`. Duplicate keys are an error, so a key set in the included file cannot also be set in the machine file; keep only the shared settings in the included file.
 
 `machine` is the machine name (`--machine` overrides it). `init` takes `vpc_id`, `subnet_id`, `instance_type`, `volume_size_gb`, `instance_name` and `ami_id` from the file unless you pass the matching option. `boxman layout apply` ignores the `ec2` map. Unknown `ec2` keys are rejected. Global options such as `--config`, `--machine`, `--profile`, and `--region` go **before** the action.
 

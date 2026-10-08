@@ -65,6 +65,28 @@ Owner = "someone"
             with self.assertRaises(SystemExit):
                 ec2.settings(self.layout_args(Path(directory) / "missing.yaml"))
 
+    def test_machine_file_includes_shared_network_file(self) -> None:
+        from boxman import layout
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            (base / "git-machine.yaml").write_text(
+                "profile: example\nregion: eu-west-1\nvpc_id: vpc-1\nsubnet_id: subnet-1\n"
+                "ami_id: ami-1\ntags:\n  Owner: someone\n"
+            )
+            for name, size in (("red", "100"), ("blue", "300")):
+                (base / f"{name}.yaml").write_text(
+                    f"ec2:\n  machine: {name}\n  volume_size_gb: {size}\n  #+include git-machine.yaml\n"
+                    "repos:\n  include:\n    - me/boxman\n"
+                )
+                result = ec2.settings(self.layout_args(base / f"{name}.yaml"))
+                self.assertEqual(result["stack_name"], f"boxman-{name}")
+                self.assertEqual((result["profile"], result["region"]), ("example", "eu-west-1"))
+                self.assertEqual(result["values"]["volume_size_gb"], size)
+                self.assertEqual(result["values"]["vpc_id"], "vpc-1")
+                self.assertEqual(result["tags"], {"Owner": "someone"})
+                self.assertEqual([r["path"] for r in layout.load_layout(base / f"{name}.yaml")[1]], ["boxman"])
+
     def test_layout_file_still_loads_as_layout(self) -> None:
         from boxman import layout
 

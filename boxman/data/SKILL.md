@@ -52,8 +52,12 @@ All scalars are strings; quote values starting with `*` (`"*/x"`).
       exclude:                    # globs on owner/name, removed from the whole include list
         - owner/prefix-docs
 
-No other keys are valid, and unknown ones are rejected. A line `#+include other.yaml`
-pastes that file in. Apply the repos alone with `boxman layout apply layout.yaml`.
+No other keys are valid, and unknown ones are rejected. One file describes one machine.
+Settings several machines share (profile, region, vpc_id, subnet_id, ami_id, tags) go in
+a file of their own, e.g. `git-machine.yaml` for a network that can reach GitHub, and each
+machine file pulls it in with `#+include git-machine.yaml` placed inside `ec2:` at the
+indent of its keys. Included text is pasted in, and duplicate keys are an error, so keep
+only shared keys in the included file. Apply the repos alone with `boxman layout apply layout.yaml`.
 
 ## 2b. Or write `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`
 
