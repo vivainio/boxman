@@ -1,6 +1,6 @@
 ---
 name: boxman
-description: Set up and manage an Ubuntu development box on AWS EC2 with boxman. Use when the user wants to create, deploy, connect to, or configure a boxman EC2 machine, or write boxman's ec2.toml.
+description: Set up and manage an Ubuntu development box on AWS EC2 with boxman. Use when the user wants to create, deploy, connect to, or configure a boxman EC2 machine, or write boxman's layout file or ec2.toml.
 ---
 
 # boxman: getting started
@@ -20,7 +20,42 @@ taken), `tag_keys` (tag keys in use with their values), `suggested_init_values`
 (vpc, subnet, AMI) and `warnings` (sections that failed, e.g. missing
 permissions). Copy tags the account requires from `tag_keys`/`instances`.
 
-## 2. Write `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`
+## 2. Write the layout file (preferred)
+
+One YAML file can hold the whole box: the machine settings and the repositories to
+clone. Pass it as
+`boxman ec2 --config layout.yaml ...` and `boxman ec2 --config layout.yaml setup -u USER --layout layout.yaml`.
+All scalars are strings; quote values starting with `*` (`"*/x"`).
+
+    ec2:                          # read by `boxman ec2`; ignored by `layout apply`
+      machine: red                # --machine overrides
+      profile: PROFILE            # no credentials here
+      region: REGION
+      vpc_id: vpc-...             # init values; a matching init option overrides
+      subnet_id: subnet-...
+      instance_type: t3.xlarge
+      volume_size_gb: 100         # at least 8
+      instance_name: mybox
+      ami_id: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+      tags:
+        Owner: someone
+    ref: main                     # defaults for every repo: ref, depth (0 = full), include_archived
+    depth: 1
+    repos:
+      dir: /srv/boxman            # clone root: absolute or ~; default /srv/boxman
+      include:                    # required
+        - owner/name              # one GitHub repo
+        - owner/prefix-*          # glob: every repo of the owner, skipping forks and archived
+        - https://host/x/y.git    # any git URL
+        - repo: owner/svc-*       # map form: repo or url, plus into (subdir, for globs),
+          into: services          #   path (for literal entries), ref, depth, include_archived
+      exclude:                    # globs on owner/name, removed from the whole include list
+        - owner/prefix-docs
+
+No other keys are valid, and unknown ones are rejected. A line `#+include other.yaml`
+pastes that file in. Apply the repos alone with `boxman layout apply layout.yaml`.
+
+## 2b. Or write `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`
 
     [ec2]
     default_machine = "red"
@@ -36,6 +71,9 @@ Only `[ec2]` (`default_machine`) and `[machines.<name>]` (`profile`, `region`,
 `tags`) are valid. No credentials go in this file.
 
 ## 3. Create and deploy the stack
+
+With the layout file: `boxman ec2 --config layout.yaml init`, then `boxman ec2 --config layout.yaml deploy`.
+With the TOML file, pass the values as options:
 
     boxman ec2 --machine red init --vpc-id vpc-... --subnet-id subnet-... \
       --instance-type t3.xlarge --volume-size-gb 100 --instance-name mybox \
