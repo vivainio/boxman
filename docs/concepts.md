@@ -14,7 +14,7 @@ Boxman has two sides: a local operator command and a command run *inside* the de
 
 Each EC2 box has one CloudFormation stack. The stack creates an instance, security groups, an IAM role and instance profile for SSM, and an EC2 Instance Connect Endpoint. Its `InstanceId` output tells Boxman which machine to operate. A machine alias such as `red` derives the stack name `boxman-red`; its profile and region select where to look.
 
-The editable stack template lives at `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/<machine>.yaml`. Machine aliases such as `red`, `blue`, and `green` are the primary Boxman identity. `boxman ec2 --machine red init` writes `red.yaml` once with the chosen instance settings and uses the derived CloudFormation stack name `boxman-red`. `deploy` reads that file and sends its parameter defaults to CloudFormation. The TOML keeps per-machine profile, region, and tags. Set `[ec2].default_machine` to choose the machine used when `--machine` is omitted.
+The editable stack template lives at `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/<machine>.yaml`. Machine aliases such as `red`, `blue`, and `green` are the primary Boxman identity. `boxman ec2 --machine red init` writes `red.yaml` once with the chosen instance settings and uses the derived CloudFormation stack name `boxman-red`. `deploy` reads that file and sends its parameter defaults to CloudFormation. The layout file's `ec2` map keeps the machine name, profile, region, and tags; `--machine` overrides the machine name.
 
 ## Access paths
 

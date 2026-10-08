@@ -100,7 +100,7 @@ ec2:
 The config contains no credentials; AWS uses the named profile. Supply the tags
 required by your account. The `ec2` map selects the AWS profile, region, stack
 and tags. Command-line options override the file;
-`--tag KEY=VALUE` adds or overrides a tag. `--config FILE` selects another layout file (see docs/ec2.md). The older `ec2.toml` is deprecated and still read, with a warning, when there is no `layout.yaml`. Put global options before the action:
+`--tag KEY=VALUE` adds or overrides a tag. `--config FILE` selects another layout file (see docs/ec2.md). Put global options before the action:
 
 ```bash
 boxman ec2 --profile your-aws-profile discover   # JSON: VPCs, subnets, instances, tags

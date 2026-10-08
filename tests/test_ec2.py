@@ -13,15 +13,9 @@ class Ec2ConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "boxman"
             path.mkdir()
-            (path / "ec2.toml").write_text('''[ec2]
-default_machine = "red"
-
-[machines.red]
-profile = "example"
-region = "eu-west-1"
-[machines.red.tags]
-Owner = "someone"
-''')
+            (path / "layout.yaml").write_text(
+                "ec2:\n  machine: red\n  profile: example\n  region: eu-west-1\n  tags:\n    Owner: someone\n"
+            )
             parser = __import__("argparse").Namespace(config=None, action="deploy", profile=None, region=None, machine=None, tag=["Owner=other"], **{key: None for key in ec2.PARAMETERS})
             with patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}):
                 result = ec2.settings(parser)
@@ -29,27 +23,18 @@ Owner = "someone"
             self.assertEqual(result["machine"], "red")
             self.assertEqual(result["stack_name"], "boxman-red")
             self.assertEqual(result["tags"], {"Owner": "other"})
+            self.assertEqual(result["config_path"], path / "layout.yaml")
 
     def layout_args(self, path: Path, action: str = "deploy", **overrides):
         values = dict(config=path, action=action, profile=None, region=None, machine=None, tag=None)
         return __import__("argparse").Namespace(**{**values, **overrides})
 
-    def test_default_prefers_layout_yaml_and_toml_warns(self) -> None:
+    def test_missing_default_config_is_an_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}):
-            config = Path(directory) / "boxman"
-            config.mkdir()
-            (config / "ec2.toml").write_text('[machines.red]\nprofile = "toml"\nregion = "r"\n')
-            args = self.layout_args(None)
-            with patch.object(ec2.sys, "stderr") as err:
-                self.assertEqual(ec2.settings(args)["profile"], "toml")
-            self.assertIn("deprecated", "".join(c.args[0] for c in err.write.call_args_list))
-            (config / "layout.yaml").write_text("ec2:\n  machine: red\n  profile: yaml\n  region: r\n")
-            with patch.object(ec2.sys, "stderr") as err:
-                result = ec2.settings(args)
-            self.assertEqual((result["profile"], result["config_path"]), ("yaml", config / "layout.yaml"))
-            err.write.assert_not_called()
+            with self.assertRaisesRegex(SystemExit, "does not exist"):
+                ec2.settings(self.layout_args(None))
 
-    def test_layout_file_replaces_toml(self) -> None:
+    def test_layout_file_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "layout.yaml"
             path.write_text(
@@ -238,7 +223,8 @@ Owner = "someone"
             layout = Path(directory) / "layout.yaml"
             layout.write_text("repos = []\n")
             (Path(directory) / "boxman").mkdir()
-            (Path(directory) / "boxman" / "ec2.toml").write_text('[machines.red]\nprofile = "p"\nregion = "r"\n')
+            default = Path(directory) / "boxman" / "layout.yaml"
+            default.write_text("ec2:\n  machine: red\n  profile: p\n  region: r\n")
             ec2.main(["--machine", "red", "layout", str(layout)])
             start.assert_called_once_with("red", layout)
             start.reset_mock()
@@ -249,8 +235,9 @@ Owner = "someone"
             config.write_text("ec2:\n  machine: red\n  profile: p\n  region: r\nrepos:\n  include:\n    - me/boxman\n")
             ec2.main(["--config", str(config), "layout"])
             start.assert_called_once_with("red", config)
-            with self.assertRaisesRegex(SystemExit, "Missing layout file"):
-                ec2.main(["--machine", "red", "layout"])
+            start.reset_mock()
+            ec2.main(["layout"])
+            start.assert_called_once_with("red", default)
             with self.assertRaisesRegex(SystemExit, "not found"):
                 ec2.main(["--machine", "red", "layout", str(layout.with_name("missing.yaml"))])
 

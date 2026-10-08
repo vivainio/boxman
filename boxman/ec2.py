@@ -12,10 +12,8 @@ import re
 import shlex
 import shutil
 import subprocess
-import sys
 import tarfile
 import tempfile
-import tomllib
 from pathlib import Path
 
 
@@ -34,7 +32,7 @@ MACHINE = re.compile(r"[a-z][a-z0-9-]{0,31}\Z")
 
 def required(value: str | None, name: str) -> str:
     if not value:
-        raise SystemExit(f"Missing {name}; provide it by option or --config")
+        raise SystemExit(f"Missing {name}; provide it by option or in the layout file")
     return value
 
 
@@ -84,11 +82,11 @@ def init_stack(name: str, values: dict) -> Path:
 LAYOUT_KEYS = {"machine", "user", "profile", "region", "tags", *PARAMETERS}
 
 
-def layout_settings(args: argparse.Namespace, config_path: Path) -> dict:
+def layout_settings(args: argparse.Namespace, config_path: Path | None) -> dict:
     """Read the machine settings from the `ec2` map of a layout file."""
     from boxman import layout
 
-    ec2_config = layout.read_document(config_path).get("ec2")
+    ec2_config = layout.read_document(config_path).get("ec2") if config_path else {}
     if not isinstance(ec2_config, dict):
         raise SystemExit(f"{config_path} has no ec2 map")
     if unknown := set(ec2_config) - LAYOUT_KEYS:
@@ -124,59 +122,12 @@ def add_tags(tags: dict, items: list[str] | None) -> dict:
 
 
 def settings(args: argparse.Namespace) -> dict:
-    document = {}
-    config_path = args.config
-    if not config_path:
-        default_layout = config_dir() / "layout.yaml"
-        config_path = default_layout if default_layout.is_file() else config_dir() / "ec2.toml"
-    if config_path.suffix != ".toml":
-        if not config_path.is_file():
-            raise SystemExit(f"Config file does not exist: {config_path}")
-        return {**layout_settings(args, config_path), "config_path": config_path}
-    if config_path.is_file():
-        print(
-            f"warning: {config_path} is deprecated; move its settings into the ec2 map of a layout file "
-            f"(default: {config_dir() / 'layout.yaml'})",
-            file=sys.stderr,
-        )
-        with config_path.open("rb") as source:
-            document = tomllib.load(source)
-    elif args.config:
-        raise SystemExit(f"Config file does not exist: {config_path}")
-    if set(document) - {"ec2", "machines"}:
-        raise SystemExit("Config may contain only [ec2] and [machines.<name>] tables")
-    ec2_config = document.get("ec2", {})
-    machines = document.get("machines", {})
-    if not isinstance(ec2_config, dict) or not isinstance(machines, dict):
-        raise SystemExit("Config must contain [ec2] and [machines.<name>] tables")
-    if set(ec2_config) - {"default_machine"}:
-        raise SystemExit("[ec2] supports only default_machine")
-    selected = getattr(args, "machine", None) or ec2_config.get("default_machine")
-    if not selected and len(machines) == 1:
-        selected = next(iter(machines))
-    selected = machine_name(required(selected, "--machine or [ec2].default_machine"))
-    machine_config = machines.get(selected, {})
-    if not isinstance(machine_config, dict):
-        raise SystemExit(f"[machines.{selected}] must be a table")
-    if set(machine_config) - {"profile", "region", "tags"}:
-        raise SystemExit(f"Unknown [machines.{selected}] settings")
-    result = {
-        "machine": selected,
-        "stack_name": stack_name(selected),
-        "profile": getattr(args, "profile", None) or machine_config.get("profile"),
-        "region": getattr(args, "region", None) or machine_config.get("region"),
-        "config_path": config_path,
-    }
-    if args.action != "init":
-        result["profile"] = required(result["profile"], "--profile")
-        result["region"] = required(result["region"], "--region")
-        if selected not in machines:
-            raise SystemExit(f"No configuration for machine {selected!r}; add [machines.{selected}]")
-    tags = machine_config.get("tags", {}).copy()
-    if not isinstance(tags, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in tags.items()):
-        raise SystemExit("[ec2.tags] must contain string keys and values")
-    result["tags"] = add_tags(tags, getattr(args, "tag", None))
-    return result
+    config_path = args.config or config_dir() / "layout.yaml"
+    if not config_path.is_file():
+        if args.config or args.action != "init":
+            raise SystemExit(f"Config file does not exist: {config_path}; create it or pass --config FILE")
+        config_path = None  # `init --machine NAME` with every value given as an option
+    return {**layout_settings(args, config_path), "config_path": config_path}
 
 
 UBUNTU_AMI = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
@@ -586,7 +537,7 @@ def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
 
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="boxman ec2")
-    parser.add_argument("--config", type=Path, help="layout file with an ec2 map (default: $XDG_CONFIG_HOME/boxman/layout.yaml, else the deprecated ec2.toml)")
+    parser.add_argument("--config", type=Path, help="layout file with an ec2 map (default: $XDG_CONFIG_HOME/boxman/layout.yaml)")
     parser.add_argument("--profile")
     parser.add_argument("--region")
     parser.add_argument("--machine", help="machine alias such as red, blue, or green")
@@ -667,9 +618,7 @@ def main(argv: list[str]) -> None:
         print(f"Created {init_stack(conf['machine'], values)}")
         return
     if args.action == "layout":
-        file = args.file or (conf["config_path"] if conf["config_path"].suffix != ".toml" else None)
-        if not file:
-            raise SystemExit("Missing layout file; pass FILE or use --config with a layout file")
+        file = args.file or conf["config_path"]
         if not file.is_file():
             raise SystemExit(f"Layout file not found: {file}")
         start_layout(args.alias or conf["machine"], file)

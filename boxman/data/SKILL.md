@@ -1,6 +1,6 @@
 ---
 name: boxman
-description: Set up and manage an Ubuntu development box on AWS EC2 with boxman. Use when the user wants to create, deploy, connect to, or configure a boxman EC2 machine, or write boxman's layout file or ec2.toml.
+description: Set up and manage an Ubuntu development box on AWS EC2 with boxman. Use when the user wants to create, deploy, connect to, or configure a boxman EC2 machine, or write boxman's layout file.
 ---
 
 # boxman: getting started
@@ -58,29 +58,12 @@ Settings several machines share (profile, region, vpc_id, subnet_id, ami_id, tag
 a file of their own, e.g. `git-machine.yaml` for a network that can reach GitHub, and each
 machine file pulls it in with `#+include git-machine.yaml` placed inside `ec2:` at the
 indent of its keys. Included text is pasted in, and duplicate keys are an error, so keep
-only shared keys in the included file. Apply the repos alone with `boxman layout layout.yaml`.
-
-## 2b. Deprecated: `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`
-
-Still read (with a warning) when there is no `layout.yaml`; do not write new ones.
-
-    [ec2]
-    default_machine = "red"
-
-    [machines.red]
-    profile = "PROFILE"
-    region = "REGION"
-
-    [machines.red.tags]
-    Owner = "someone"
-
-Only `[ec2]` (`default_machine`) and `[machines.<name>]` (`profile`, `region`,
-`tags`) are valid. No credentials go in this file.
+only shared keys in the included file. Apply the repos alone with `boxman layout apply layout.yaml`.
 
 ## 3. Create and deploy the stack
 
-With the layout file: `boxman ec2 --config layout.yaml init`, then `boxman ec2 --config layout.yaml deploy`.
-With the TOML file, pass the values as options:
+With the values in the layout file: `boxman ec2 --config layout.yaml init`, then `boxman ec2 --config layout.yaml deploy`.
+Or pass them as options (they override the file):
 
     boxman ec2 --machine red init --vpc-id vpc-... --subnet-id subnet-... \
       --instance-type t3.xlarge --volume-size-gb 100 --instance-name mybox \
