@@ -2,7 +2,7 @@
 
 ## Local files
 
-The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has `[machines.red]`, `[machines.blue]`, or `[machines.green]` tables with `profile`, `region`, and optional `tags`. Set `[ec2].default_machine` to choose the default. Use `--machine NAME` to override it, and `--config PATH` to select another machine collection. Instead of the TOML file, `--config FILE` can name a [layout file](commands.md) (any file not ending in `.toml`) with an `ec2` map, so one file holds the whole box:
+The config is a [layout file](commands.md) with an `ec2` map, so one file holds the whole box. The default is `${XDG_CONFIG_HOME:-~/.config}/boxman/layout.yaml`; `--config FILE` selects another. Use `--machine NAME` to override the machine name.
 
 ```yaml
 ec2:
@@ -53,7 +53,9 @@ repos:
 
 Run it as `boxman ec2 --config red.yaml ...`. Duplicate keys are an error, so a key set in the included file cannot also be set in the machine file; keep only the shared settings in the included file.
 
-`machine` is the machine name (`--machine` overrides it). `user` is the Unix account used by `setup`, `ssh`, `ssh-config`, `secrets send`, `connect` and `run`; `-u` overrides it, and the commands that need a user fail with a clear message when neither is given. `user` is the Unix account used by `setup`, `ssh`, `ssh-config`, `secrets send`, `connect` and `run`; `-u` overrides it, and the commands that need a user fail with a clear message when neither is given. `init` takes `vpc_id`, `subnet_id`, `instance_type`, `volume_size_gb`, `instance_name` and `ami_id` from the file unless you pass the matching option. `boxman layout apply` ignores the `ec2` map. Unknown `ec2` keys are rejected. Global options such as `--config`, `--machine`, `--profile`, and `--region` go **before** the action.
+`machine` is the machine name (`--machine` overrides it). `user` is the Unix account used by `setup`, `ssh`, `ssh-config`, `secrets send`, `connect` and `run`; `-u` overrides it, and the commands that need a user fail with a clear message when neither is given. `user` is the Unix account used by `setup`, `ssh`, `ssh-config`, `secrets send`, `connect` and `run`; `-u` overrides it, and the commands that need a user fail with a clear message when neither is given. `init` takes `vpc_id`, `subnet_id`, `instance_type`, `volume_size_gb`, `instance_name` and `ami_id` from the file unless you pass the matching option. `boxman layout` ignores the `ec2` map. Unknown `ec2` keys are rejected. Global options such as `--config`, `--machine`, `--profile`, and `--region` go **before** the action.
+
+**Deprecated: `ec2.toml`.** If there is no `layout.yaml`, boxman still reads `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml` (or a `--config` file ending in `.toml`) and prints a warning. It has `[machines.red]`-style tables with `profile`, `region` and optional `tags`, and `[ec2].default_machine` selects the machine. It will be removed in a later release; move its settings into the `ec2` map of a layout file.
 
 `init --machine red` creates `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/red.yaml` and uses the derived stack name `boxman-red`. It refuses to overwrite the file. The generated template includes all six required instance values as CloudFormation parameter defaults. To change a box, edit those defaults or the resource definitions, then run `deploy`. `deploy` reads the defaults from the YAML and passes them as stack parameters. Keep the `Parameters` entries in the generated form so Boxman can read them.
 
@@ -78,7 +80,7 @@ boxman ec2 run -u myuser 'id'
 boxman ec2 setup --user alice
 ```
 
-`destroy` deletes the CloudFormation stack and waits for it: the instance, its root volume (which is deleted with the instance), the Instance Connect Endpoint, the security groups and the IAM role are all removed, and the data on the disk is lost. It asks you to type the machine name unless you pass `--yes`. It then removes the machine's local stack template, its `# boxman:` blocks in `~/.ssh/config` and its generated key pair; pass `--keep-local` to keep those. The `[machines.NAME]` entry in the TOML config stays. `stop` keeps the volume, which still costs storage.
+`destroy` deletes the CloudFormation stack and waits for it: the instance, its root volume (which is deleted with the instance), the Instance Connect Endpoint, the security groups and the IAM role are all removed, and the data on the disk is lost. It asks you to type the machine name unless you pass `--yes`. It then removes the machine's local stack template, its `# boxman:` blocks in `~/.ssh/config` and its generated key pair; pass `--keep-local` to keep those. The machine's settings in the config file stay. `stop` keeps the volume, which still costs storage.
 
 `status` reports EC2 state and SSM registration. `start` and `stop` wait for the instance state change. `connect -u` starts a session as `ssm-user` and uses `sudo -iu` to enter the chosen account. `run` executes through SSM Run Command as root unless `-u` is supplied; it prints status and output and exits with an error when the remote command fails.
 

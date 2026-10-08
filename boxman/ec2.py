@@ -12,6 +12,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import tomllib
@@ -124,12 +125,20 @@ def add_tags(tags: dict, items: list[str] | None) -> dict:
 
 def settings(args: argparse.Namespace) -> dict:
     document = {}
-    config_path = args.config or config_dir() / "ec2.toml"
-    if args.config and args.config.suffix != ".toml":
+    config_path = args.config
+    if not config_path:
+        default_layout = config_dir() / "layout.yaml"
+        config_path = default_layout if default_layout.is_file() else config_dir() / "ec2.toml"
+    if config_path.suffix != ".toml":
         if not config_path.is_file():
             raise SystemExit(f"Config file does not exist: {config_path}")
-        return layout_settings(args, config_path)
+        return {**layout_settings(args, config_path), "config_path": config_path}
     if config_path.is_file():
+        print(
+            f"warning: {config_path} is deprecated; move its settings into the ec2 map of a layout file "
+            f"(default: {config_dir() / 'layout.yaml'})",
+            file=sys.stderr,
+        )
         with config_path.open("rb") as source:
             document = tomllib.load(source)
     elif args.config:
@@ -156,6 +165,7 @@ def settings(args: argparse.Namespace) -> dict:
         "stack_name": stack_name(selected),
         "profile": getattr(args, "profile", None) or machine_config.get("profile"),
         "region": getattr(args, "region", None) or machine_config.get("region"),
+        "config_path": config_path,
     }
     if args.action != "init":
         result["profile"] = required(result["profile"], "--profile")
@@ -537,7 +547,7 @@ LAYOUT_STATE = "$HOME/.local/state/boxman"
 
 
 def start_layout(alias: str, layout: Path) -> None:
-    """Copy a layout file (includes expanded, `ec2` map removed) to the host and start `boxman layout apply` detached with nohup."""
+    """Copy a layout file (includes expanded, `ec2` map removed) to the host and start `boxman layout` detached with nohup."""
     remote_ssh(alias, f'mkdir -p "{LAYOUT_STATE}"')
     from boxman import layout as layout_file
 
@@ -550,7 +560,7 @@ def start_layout(alias: str, layout: Path) -> None:
     token = f'GH_TOKEN="${{GH_TOKEN:-$({boxman} secrets read GH_TOKEN 2>/dev/null)}}"'
     remote_ssh(
         alias,
-        f'{token} nohup {boxman} layout apply "{LAYOUT_STATE}/layout.yaml" '
+        f'{token} nohup {boxman} layout "{LAYOUT_STATE}/layout.yaml" '
         f'> "{LAYOUT_STATE}/layout.log" 2>&1 < /dev/null &',
     )
     print(f"Cloning started on {alias}; follow it with: ssh {alias} tail -f .local/state/boxman/layout.log")
@@ -576,7 +586,7 @@ def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
 
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="boxman ec2")
-    parser.add_argument("--config", type=Path, help="TOML file, or a layout file with an ec2 map (default: $XDG_CONFIG_HOME/boxman/ec2.toml)")
+    parser.add_argument("--config", type=Path, help="layout file with an ec2 map (default: $XDG_CONFIG_HOME/boxman/layout.yaml, else the deprecated ec2.toml)")
     parser.add_argument("--profile")
     parser.add_argument("--region")
     parser.add_argument("--machine", help="machine alias such as red, blue, or green")
@@ -657,7 +667,7 @@ def main(argv: list[str]) -> None:
         print(f"Created {init_stack(conf['machine'], values)}")
         return
     if args.action == "layout":
-        file = args.file or (args.config if args.config and args.config.suffix != ".toml" else None)
+        file = args.file or (conf["config_path"] if conf["config_path"].suffix != ".toml" else None)
         if not file:
             raise SystemExit("Missing layout file; pass FILE or use --config with a layout file")
         if not file.is_file():

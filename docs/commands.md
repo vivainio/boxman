@@ -31,7 +31,7 @@ Use `boxman ec2 --help` and `boxman ec2 ACTION --help` for option details. EC2 g
 makes `/srv/boxman` group-owned with mode `2775` (setgid) so shared checkouts
 stay writable by every user in the group.
 
-`boxman layout apply FILE` clones the repositories described by a layout file
+`boxman layout FILE` clones the repositories described by a layout file
 into `/srv/boxman`. Clones run in parallel (`-j N`, default 4) into `/srv/boxman/.partial` and are
 renamed into place when finished, so an interrupted run can simply be repeated:
 finished repositories are skipped and stale partial clones are discarded. If the group was added after the current login began, the command
@@ -91,7 +91,7 @@ A line `#+include other.yaml` is replaced by that file's text, so a layout can b
 or shared; see the miniformat README for the details. Errors name the line.
 
 `boxman ec2 layout [FILE]` copies the layout to a host that is already set up (with
-includes expanded and the `ec2` map removed) and starts `boxman layout apply` there
+includes expanded and the `ec2` map removed) and starts `boxman layout` there
 with `nohup`, logging to `~/.local/state/boxman/layout.log`; it returns without
 waiting for the clones. Without `FILE` it uses the `--config` layout file. Send the
 GitHub token first (`boxman ec2 secrets send`), or private repositories and patterns

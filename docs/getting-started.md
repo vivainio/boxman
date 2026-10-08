@@ -17,19 +17,16 @@ You need an AWS CLI profile with credentials for the target account, plus AWS CL
 
 ## Choose a box
 
-Create `${XDG_CONFIG_HOME:-$HOME/.config}/boxman/ec2.toml`:
+Create `${XDG_CONFIG_HOME:-$HOME/.config}/boxman/layout.yaml`:
 
-```toml
-[ec2]
-default_machine = "red"
-
-[machines.red]
-profile = "my-profile"
-region = "eu-west-1"
-
-[machines.red.tags]
-Owner = "my-team"
-Environment = "development"
+```yaml
+ec2:
+  machine: red
+  profile: my-profile
+  region: eu-west-1
+  tags:
+    Owner: my-team
+    Environment: development
 ```
 
 These names are examples. Use your account's required tags. Boxman does not choose a profile, network, owner, or instance settings for you.
@@ -39,13 +36,13 @@ These names are examples. Use your account's required tags. Boxman does not choo
 Run `init` once with your actual VPC, subnet, instance size, volume size, name, and AMI or SSM AMI parameter:
 
 ```bash
-boxman ec2 --machine red init \
+boxman ec2 init \
   --vpc-id vpc-example --subnet-id subnet-example \
   --instance-type t3.xlarge --volume-size-gb 100 \
   --instance-name my-dev-box \
   --ami-id /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
 boxman ec2 deploy
-boxman ec2 --machine red status
+boxman ec2 status
 ```
 
 Inspect and edit `~/.config/boxman/stacks/my-dev-box.yaml` before deployment if needed. `deploy` creates or updates the stack and waits for CloudFormation to finish. Give the instance time to register with SSM, then connect:

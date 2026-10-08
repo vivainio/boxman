@@ -252,7 +252,6 @@ def clone(repo: dict, root: Path) -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["apply"])
     parser.add_argument("file", type=Path, help="layout file")
     parser.add_argument("-j", "--jobs", type=int, default=4, help="parallel clones (default: 4)")
     return parser.parse_args(argv)

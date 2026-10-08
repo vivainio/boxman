@@ -20,14 +20,14 @@ taken), `tag_keys` (tag keys in use with their values), `suggested_init_values`
 (vpc, subnet, AMI) and `warnings` (sections that failed, e.g. missing
 permissions). Copy tags the account requires from `tag_keys`/`instances`.
 
-## 2. Write the layout file (preferred)
+## 2. Write the layout file (`${XDG_CONFIG_HOME:-~/.config}/boxman/layout.yaml`, or pass `--config FILE`)
 
 One YAML file can hold the whole box: the machine settings and the repositories to
 clone. Pass it as
 `boxman ec2 --config layout.yaml ...`.
 All scalars are strings; quote values starting with `*` (`"*/x"`).
 
-    ec2:                          # read by `boxman ec2`; ignored by `layout apply`
+    ec2:                          # read by `boxman ec2`; ignored by `layout`
       machine: red                # --machine overrides
       user: alice                 # Unix account for setup/ssh/...; -u overrides
       profile: PROFILE            # no credentials here
@@ -58,9 +58,11 @@ Settings several machines share (profile, region, vpc_id, subnet_id, ami_id, tag
 a file of their own, e.g. `git-machine.yaml` for a network that can reach GitHub, and each
 machine file pulls it in with `#+include git-machine.yaml` placed inside `ec2:` at the
 indent of its keys. Included text is pasted in, and duplicate keys are an error, so keep
-only shared keys in the included file. Apply the repos alone with `boxman layout apply layout.yaml`.
+only shared keys in the included file. Apply the repos alone with `boxman layout layout.yaml`.
 
-## 2b. Or write `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`
+## 2b. Deprecated: `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`
+
+Still read (with a warning) when there is no `layout.yaml`; do not write new ones.
 
     [ec2]
     default_machine = "red"

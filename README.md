@@ -79,35 +79,28 @@ while unlocked. Keep home directory permissions private to each Unix owner.
 ## EC2 host
 
 Install the optional AWS dependency, then create
-`${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`:
+`${XDG_CONFIG_HOME:-~/.config}/boxman/layout.yaml`:
 
 ```bash
 uv tool install --upgrade 'boxman[ec2]'
 mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/boxman"
 ```
 
-```toml
-[ec2]
-default_machine = "red"
-
-[machines.red]
-profile = "your-aws-profile"
-region = "your-region"
-
-[machines.red.tags]
-Owner = "your-owner"
-Environment = "development"
-
-[machines.blue]
-profile = "your-aws-profile"
-region = "your-region"
+```yaml
+ec2:
+  machine: red
+  user: your-user
+  profile: your-aws-profile
+  region: your-region
+  tags:
+    Owner: your-owner
+    Environment: development
 ```
 
 The config contains no credentials; AWS uses the named profile. Supply the tags
-required by your account. The TOML file selects the AWS profile, region, stack,
+required by your account. The `ec2` map selects the AWS profile, region, stack
 and tags. Command-line options override the file;
-`--tag KEY=VALUE` adds or overrides a tag. `--config PATH` selects another TOML
-file, or a layout file with an `ec2` map that replaces the TOML file (see docs/ec2.md). Put global options before the action:
+`--tag KEY=VALUE` adds or overrides a tag. `--config FILE` selects another layout file (see docs/ec2.md). The older `ec2.toml` is deprecated and still read, with a warning, when there is no `layout.yaml`. Put global options before the action:
 
 ```bash
 boxman ec2 --profile your-aws-profile discover   # JSON: VPCs, subnets, instances, tags

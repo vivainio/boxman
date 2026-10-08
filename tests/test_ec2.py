@@ -34,6 +34,21 @@ Owner = "someone"
         values = dict(config=path, action=action, profile=None, region=None, machine=None, tag=None)
         return __import__("argparse").Namespace(**{**values, **overrides})
 
+    def test_default_prefers_layout_yaml_and_toml_warns(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}):
+            config = Path(directory) / "boxman"
+            config.mkdir()
+            (config / "ec2.toml").write_text('[machines.red]\nprofile = "toml"\nregion = "r"\n')
+            args = self.layout_args(None)
+            with patch.object(ec2.sys, "stderr") as err:
+                self.assertEqual(ec2.settings(args)["profile"], "toml")
+            self.assertIn("deprecated", "".join(c.args[0] for c in err.write.call_args_list))
+            (config / "layout.yaml").write_text("ec2:\n  machine: red\n  profile: yaml\n  region: r\n")
+            with patch.object(ec2.sys, "stderr") as err:
+                result = ec2.settings(args)
+            self.assertEqual((result["profile"], result["config_path"]), ("yaml", config / "layout.yaml"))
+            err.write.assert_not_called()
+
     def test_layout_file_replaces_toml(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "layout.yaml"
@@ -209,7 +224,7 @@ Owner = "someone"
         self.assertIn(" nohup ", last[1])
         self.assertIn("secrets read GH_TOKEN", last[1])
         self.assertTrue(last[1].endswith("&"))
-        self.assertIn("layout apply", last[1])
+        self.assertIn("boxman\" layout ", last[1])
 
     def test_host_block_accepts_new_host_keys(self) -> None:
         block = ec2.host_block("red", "i-123", "alice", Path("/k"), "tunnel cmd")
