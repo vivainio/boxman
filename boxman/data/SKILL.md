@@ -90,6 +90,10 @@ the machine, so day-to-day use is plain `ssh red` (also `scp`, `rsync`, VS Code
 Remote). The entry tunnels through EC2 Instance Connect via boxman, so no
 `boxman ec2 ssh` is needed.
 
+`secrets.json` is a JSON object of strings, e.g. `{"GH_TOKEN":"..."}`, with mode 600. For GitHub
+use a fine-grained token (read-only Contents on the repos, authorized for SSO if needed), or
+`umask 077; printf '{"GH_TOKEN":"%s"}\n' "$(gh auth token)" > secrets.json` for a quick one.
+
 ## On the box itself
 
     sudo boxman system    # apt packages, rootless containers
