@@ -7,6 +7,7 @@ The default config is `${XDG_CONFIG_HOME:-~/.config}/boxman/ec2.toml`. It has `[
 ```yaml
 ec2:
   machine: red
+  user: alice
   profile: your-aws-profile
   region: your-region
   vpc_id: vpc-...
@@ -40,6 +41,7 @@ tags:
 # red.yaml
 ec2:
   machine: red
+  user: alice
   instance_type: m7i.xlarge
   volume_size_gb: 200
   instance_name: red
@@ -51,7 +53,7 @@ repos:
 
 Run it as `boxman ec2 --config red.yaml ...`. Duplicate keys are an error, so a key set in the included file cannot also be set in the machine file; keep only the shared settings in the included file.
 
-`machine` is the machine name (`--machine` overrides it). `init` takes `vpc_id`, `subnet_id`, `instance_type`, `volume_size_gb`, `instance_name` and `ami_id` from the file unless you pass the matching option. `boxman layout apply` ignores the `ec2` map. Unknown `ec2` keys are rejected. Global options such as `--config`, `--machine`, `--profile`, and `--region` go **before** the action.
+`machine` is the machine name (`--machine` overrides it). `user` is the Unix account used by `setup`, `ssh`, `ssh-config`, `secrets send`, `connect` and `run`; `-u` overrides it, and the commands that need a user fail with a clear message when neither is given. `user` is the Unix account used by `setup`, `ssh`, `ssh-config`, `secrets send`, `connect` and `run`; `-u` overrides it, and the commands that need a user fail with a clear message when neither is given. `init` takes `vpc_id`, `subnet_id`, `instance_type`, `volume_size_gb`, `instance_name` and `ami_id` from the file unless you pass the matching option. `boxman layout apply` ignores the `ec2` map. Unknown `ec2` keys are rejected. Global options such as `--config`, `--machine`, `--profile`, and `--region` go **before** the action.
 
 `init --machine red` creates `${XDG_CONFIG_HOME:-~/.config}/boxman/stacks/red.yaml` and uses the derived stack name `boxman-red`. It refuses to overwrite the file. The generated template includes all six required instance values as CloudFormation parameter defaults. To change a box, edit those defaults or the resource definitions, then run `deploy`. `deploy` reads the defaults from the YAML and passes them as stack parameters. Keep the `Parameters` entries in the generated form so Boxman can read them.
 

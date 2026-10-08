@@ -80,7 +80,7 @@ def init_stack(name: str, values: dict) -> Path:
     return target
 
 
-LAYOUT_KEYS = {"machine", "profile", "region", "tags", *PARAMETERS}
+LAYOUT_KEYS = {"machine", "user", "profile", "region", "tags", *PARAMETERS}
 
 
 def layout_settings(args: argparse.Namespace, config_path: Path) -> dict:
@@ -103,6 +103,7 @@ def layout_settings(args: argparse.Namespace, config_path: Path) -> dict:
         "stack_name": stack_name(selected),
         "profile": getattr(args, "profile", None) or ec2_config.get("profile"),
         "region": getattr(args, "region", None) or ec2_config.get("region"),
+        "user": username(ec2_config["user"]) if "user" in ec2_config else None,
         "values": {key: ec2_config[key] for key in PARAMETERS if key in ec2_config},
         "tags": add_tags(dict(tags), getattr(args, "tag", None)),
     }
@@ -594,16 +595,16 @@ def main(argv: list[str]) -> None:
     connect = sub.add_parser("connect")
     connect.add_argument("-u", "--user")
     ssh = sub.add_parser("ssh")
-    ssh.add_argument("-u", "--user", required=True)
+    ssh.add_argument("-u", "--user")
     ssh.add_argument("--key-path", type=Path)
     ssh.add_argument("-c", "--container")
     ssh_config = sub.add_parser("ssh-config")
-    ssh_config.add_argument("-u", "--user", required=True)
+    ssh_config.add_argument("-u", "--user")
     ssh_config.add_argument("--alias", help="local SSH and Herdr name (default: stack name)")
     ssh_config.add_argument("--key-path", type=Path)
     ssh_config.add_argument("--herdr", action="store_true", help="prepare the remote Herdr server and save this SSH machine")
     setup = sub.add_parser("setup", help="set up the remote host through SSH")
-    setup.add_argument("-u", "--user", required=True, help="Unix account to create or configure")
+    setup.add_argument("-u", "--user", help="Unix account to create or configure (default: ec2.user in the config)")
     setup.add_argument("--bootstrap-user", default="ubuntu", help="existing account used for the initial SSH connection (default: ubuntu)")
     setup.add_argument("--layout", type=Path, help="layout file; repositories are cloned in the background after setup")
     layout = sub.add_parser("layout", help="copy a layout file to a host that is already set up and start cloning in the background")
@@ -622,7 +623,7 @@ def main(argv: list[str]) -> None:
     secrets_command = sub.add_parser("secrets", help="send a local JSON secrets document to the selected machine")
     secrets_command.add_argument("operation", choices=["send"])
     secrets_command.add_argument("source", type=Path)
-    secrets_command.add_argument("-u", "--user", required=True)
+    secrets_command.add_argument("-u", "--user")
     args = parser.parse_args(argv)
     if args.action == "proxy":
         eic_proxy(
@@ -645,6 +646,10 @@ def main(argv: list[str]) -> None:
             raise SystemExit(f"AWS error: {exc}") from exc
         return
     conf = settings(args)
+    if hasattr(args, "user"):
+        args.user = args.user or conf.get("user")
+        if not args.user and args.action in ("ssh", "ssh-config", "setup", "secrets"):
+            raise SystemExit("Missing user; pass -u USER or set ec2.user in the layout file")
     if args.action == "init":
         values = {key: getattr(args, key) or conf.get("values", {}).get(key) for key in PARAMETERS}
         try:

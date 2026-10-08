@@ -49,6 +49,25 @@ Owner = "someone"
             self.assertEqual(result["values"], {"vpc_id": "vpc-1", "subnet_id": "subnet-1", "volume_size_gb": "100"})
             self.assertEqual(ec2.settings(self.layout_args(path, machine="blue"))["stack_name"], "boxman-blue")
 
+    def test_layout_file_supplies_the_user(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "layout.yaml"
+            path.write_text("ec2:\n  machine: red\n  user: alice\n  profile: p\n  region: r\n")
+            self.assertEqual(ec2.settings(self.layout_args(path))["user"], "alice")
+            path.write_text("ec2:\n  machine: red\n  user: Bad User\n")
+            with self.assertRaises(SystemExit):
+                ec2.settings(self.layout_args(path, action="init"))
+
+    def test_user_option_defaults_to_the_layout_user(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.object(ec2, "start_layout"):
+            path = Path(directory) / "layout.yaml"
+            path.write_text("ec2:\n  machine: red\n  profile: p\n  region: r\n")
+            with self.assertRaisesRegex(SystemExit, "Missing user"):
+                ec2.main(["--config", str(path), "setup"])
+            path.write_text("ec2:\n  machine: red\n  user: alice\n  profile: p\n  region: r\n")
+            with patch.dict("sys.modules", {"boto3": None}), self.assertRaisesRegex(SystemExit, "boto3"):
+                ec2.main(["--config", str(path), "setup"])
+
     def test_layout_file_rejects_bad_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "layout.yaml"

@@ -29,6 +29,7 @@ All scalars are strings; quote values starting with `*` (`"*/x"`).
 
     ec2:                          # read by `boxman ec2`; ignored by `layout apply`
       machine: red                # --machine overrides
+      user: alice                 # Unix account for setup/ssh/...; -u overrides
       profile: PROFILE            # no credentials here
       region: REGION
       vpc_id: vpc-...             # init values; a matching init option overrides
