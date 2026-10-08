@@ -65,6 +65,15 @@ class LayoutTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             layout.load_layout(path)
 
+    def test_flatten_expands_includes_and_round_trips(self) -> None:
+        (self.tmp / "repos.yaml").write_text("include:\n  - co/foo-*\n  - repo: me/x\n    into: tools\nexclude:\n  - co/foo-old\n")
+        path = self.tmp / "machine.yaml"
+        path.write_text("ec2:\n  machine: red\nref: main\nrepos:\n  dir: /work\n  #+include repos.yaml\n")
+        flat = self.tmp / "flat.yaml"
+        flat.write_text(layout.flatten(path))
+        self.assertNotIn("ec2", flat.read_text())
+        self.assertEqual(layout.load_layout(flat), layout.load_layout(path))
+
     def test_exclude_applies_to_all_includes(self) -> None:
         repos = self.load(
             "repos:\n  include:\n    - co/foo-*\n    - me/boxman\n    - co/bar\n"

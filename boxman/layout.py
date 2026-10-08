@@ -183,6 +183,34 @@ def load_layout(path: Path) -> tuple[Path, list[dict]]:
     return root, repos
 
 
+def dump(value: object, indent: int = 0) -> str:
+    """Write nested maps, lists and strings as miniformat text."""
+    pad = " " * indent
+    lines = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(item, (dict, list)) and item:
+                lines.append(f"{pad}{key}:\n{dump(item, indent + 2)}")
+            elif isinstance(item, (dict, list)):
+                lines.append(f"{pad}{key}: {'{}' if isinstance(item, dict) else '[]'}")
+            else:
+                lines.append(f"{pad}{key}: {json.dumps(item)}")
+    else:
+        for item in value:
+            if isinstance(item, dict) and item:
+                lines.append(pad + "- " + dump(item, indent + 2)[indent + 2 :])
+            else:
+                lines.append(f"{pad}- {json.dumps(item)}")
+    return "\n".join(lines)
+
+
+def flatten(path: Path) -> str:
+    """The layout without its `ec2` map and with every #+include expanded, ready to run elsewhere."""
+    load_layout(path)  # reject a bad file here, not on the host
+    document = {k: v for k, v in read_document(path).items() if k != "ec2"}
+    return dump(document) + "\n"
+
+
 def ensure_group_active() -> None:
     """Re-run under `sg boxman` when the group was added after this login began."""
     import grp

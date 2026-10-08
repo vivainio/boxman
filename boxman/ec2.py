@@ -536,9 +536,14 @@ LAYOUT_STATE = "$HOME/.local/state/boxman"
 
 
 def start_layout(alias: str, layout: Path) -> None:
-    """Copy a layout file to the host and start `boxman layout apply` detached with nohup."""
+    """Copy a layout file (includes expanded, `ec2` map removed) to the host and start `boxman layout apply` detached with nohup."""
     remote_ssh(alias, f'mkdir -p "{LAYOUT_STATE}"')
-    subprocess.run(["scp", str(layout), f"{alias}:.local/state/boxman/layout.yaml"], check=True)
+    from boxman import layout as layout_file
+
+    with tempfile.TemporaryDirectory() as directory:
+        flat = Path(directory) / "layout.yaml"
+        flat.write_text(layout_file.flatten(layout))
+        subprocess.run(["scp", str(flat), f"{alias}:.local/state/boxman/layout.yaml"], check=True)
     boxman = '"$HOME/.local/bin/boxman"'
     # `gh repo list` (glob entries) reads GH_TOKEN; take it from the tempkeys keyset when unset
     token = f'GH_TOKEN="${{GH_TOKEN:-$({boxman} secrets read GH_TOKEN 2>/dev/null)}}"'

@@ -172,9 +172,19 @@ Owner = "someone"
         self.assertIn(("red", "env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli verify"), commands)
 
     def test_setup_host_starts_layout_with_nohup(self) -> None:
-        with patch.object(ec2, "stage_package", return_value=(Path("/tmp/x"), "/tmp/x")), patch.object(ec2, "remote_ssh") as remote, patch.object(ec2.subprocess, "run") as run:
-            ec2.setup_host("red-bootstrap", "red", "alice", Path("layout.yaml"))
-        self.assertEqual(run.call_args.args[0], ["scp", "layout.yaml", "red:.local/state/boxman/layout.yaml"])
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "layout.yaml"
+            source.write_text("ec2:\n  machine: red\nrepos:\n  #+include repos.yaml\n")
+            (Path(directory) / "repos.yaml").write_text("include:\n  - me/boxman\n")
+            sent = []
+
+            def fake_run(cmd, check):
+                sent.append((cmd, Path(cmd[1]).read_text()))
+
+            with patch.object(ec2, "stage_package", return_value=(Path("/tmp/x"), "/tmp/x")), patch.object(ec2, "remote_ssh") as remote, patch.object(ec2.subprocess, "run", fake_run):
+                ec2.setup_host("red-bootstrap", "red", "alice", source)
+        self.assertEqual(sent[0][0][2], "red:.local/state/boxman/layout.yaml")
+        self.assertEqual(sent[0][1], 'repos:\n  include:\n    - "me/boxman"\n')
         last = remote.call_args_list[-1].args
         self.assertEqual(last[0], "red")
         self.assertIn(" nohup ", last[1])
