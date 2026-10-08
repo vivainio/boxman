@@ -90,9 +90,12 @@ does not exist and must be writable by the current user.
 A line `#+include other.yaml` is replaced by that file's text, so a layout can be split up
 or shared; see the miniformat README for the details. Errors name the line.
 
-`boxman ec2 setup -u USER --layout FILE` copies the file to the host and starts
-`boxman layout apply` there with `nohup`, logging to
-`~/.local/state/boxman/layout.log`; setup returns without waiting for the clones.
+`boxman ec2 layout [FILE]` copies the layout to a host that is already set up (with
+includes expanded and the `ec2` map removed) and starts `boxman layout apply` there
+with `nohup`, logging to `~/.local/state/boxman/layout.log`; it returns without
+waiting for the clones. Without `FILE` it uses the `--config` layout file. Send the
+GitHub token first (`boxman ec2 secrets send`), or private repositories and patterns
+will fail.
 
 Patterns skip forks and archived repositories. Each clone gets
 `core.sharedRepository=group`. Paths that escape the clone directory are rejected.

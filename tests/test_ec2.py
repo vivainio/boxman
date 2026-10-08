@@ -190,7 +190,7 @@ Owner = "someone"
         self.assertIn(("red", ec2.INSTALL_BOXMAN), commands)
         self.assertIn(("red", "env PYTHONPATH=/tmp/boxman-setup-x python3 -m boxman.cli verify"), commands)
 
-    def test_setup_host_starts_layout_with_nohup(self) -> None:
+    def test_start_layout_sends_flat_file_and_runs_with_nohup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "layout.yaml"
             source.write_text("ec2:\n  machine: red\nrepos:\n  #+include repos.yaml\n")
@@ -200,8 +200,8 @@ Owner = "someone"
             def fake_run(cmd, check):
                 sent.append((cmd, Path(cmd[1]).read_text()))
 
-            with patch.object(ec2, "stage_package", return_value=(Path("/tmp/x"), "/tmp/x")), patch.object(ec2, "remote_ssh") as remote, patch.object(ec2.subprocess, "run", fake_run):
-                ec2.setup_host("red-bootstrap", "red", "alice", source)
+            with patch.object(ec2, "remote_ssh") as remote, patch.object(ec2.subprocess, "run", fake_run):
+                ec2.start_layout("red", source)
         self.assertEqual(sent[0][0][2], "red:.local/state/boxman/layout.yaml")
         self.assertEqual(sent[0][1], 'repos:\n  include:\n    - "me/boxman"\n')
         last = remote.call_args_list[-1].args
@@ -229,6 +229,13 @@ Owner = "someone"
             start.reset_mock()
             ec2.main(["--machine", "red", "layout", str(layout), "--alias", "box"])
             start.assert_called_once_with("box", layout)
+            start.reset_mock()
+            config = Path(directory) / "machine.yaml"
+            config.write_text("ec2:\n  machine: red\n  profile: p\n  region: r\nrepos:\n  include:\n    - me/boxman\n")
+            ec2.main(["--config", str(config), "layout"])
+            start.assert_called_once_with("red", config)
+            with self.assertRaisesRegex(SystemExit, "Missing layout file"):
+                ec2.main(["--machine", "red", "layout"])
             with self.assertRaisesRegex(SystemExit, "not found"):
                 ec2.main(["--machine", "red", "layout", str(layout.with_name("missing.yaml"))])
 

@@ -24,7 +24,7 @@ permissions). Copy tags the account requires from `tag_keys`/`instances`.
 
 One YAML file can hold the whole box: the machine settings and the repositories to
 clone. Pass it as
-`boxman ec2 --config layout.yaml ...` and `boxman ec2 --config layout.yaml setup -u USER --layout layout.yaml`.
+`boxman ec2 --config layout.yaml ...`.
 All scalars are strings; quote values starting with `*` (`"*/x"`).
 
     ec2:                          # read by `boxman ec2`; ignored by `layout apply`
@@ -96,7 +96,8 @@ needed; it refuses to overwrite). Global options (`--config`, `--machine`,
     boxman ec2 setup --user USER        # create the account, install boxman, tools; writes SSH config
     boxman ec2 ssh-config -u USER [--herdr]   # (re)write the SSH config entry on its own
     boxman ec2 run -u USER 'uname -a'
-    boxman ec2 secrets send ./secrets.json -u USER
+    boxman ec2 secrets send ./secrets.json -u USER   # GH_TOKEN etc., before layout
+    boxman ec2 layout [FILE]            # clone the repos in the background (default: the --config file)
     boxman ec2 destroy                  # deletes instance AND volume (asks to confirm; --yes skips)
 
 After `setup` (or `ssh-config`) there is an entry in `~/.ssh/config` named after

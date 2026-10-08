@@ -556,7 +556,7 @@ def start_layout(alias: str, layout: Path) -> None:
     print(f"Cloning started on {alias}; follow it with: ssh {alias} tail -f .local/state/boxman/layout.log")
 
 
-def setup_host(bootstrap_alias: str, target_alias: str, user: str, layout: Path | None = None) -> None:
+def setup_host(bootstrap_alias: str, target_alias: str, user: str) -> None:
     remote_dir, remote_path = stage_package(bootstrap_alias)
     python_path = shlex.quote(str(remote_dir))
     try:
@@ -572,8 +572,6 @@ def setup_host(bootstrap_alias: str, target_alias: str, user: str, layout: Path 
         remote_ssh(target_alias, f"env PYTHONPATH={python_path} python3 -m boxman.cli verify")
     finally:
         remote_ssh(bootstrap_alias, f"rm -rf {shlex.quote(remote_path)}")
-    if layout:
-        start_layout(target_alias, layout)
 
 
 def main(argv: list[str]) -> None:
@@ -606,9 +604,8 @@ def main(argv: list[str]) -> None:
     setup = sub.add_parser("setup", help="set up the remote host through SSH")
     setup.add_argument("-u", "--user", help="Unix account to create or configure (default: ec2.user in the config)")
     setup.add_argument("--bootstrap-user", default="ubuntu", help="existing account used for the initial SSH connection (default: ubuntu)")
-    setup.add_argument("--layout", type=Path, help="layout file; repositories are cloned in the background after setup")
     layout = sub.add_parser("layout", help="copy a layout file to a host that is already set up and start cloning in the background")
-    layout.add_argument("file", type=Path, help="layout file")
+    layout.add_argument("file", type=Path, nargs="?", help="layout file (default: the --config file)")
     layout.add_argument("--alias", help="SSH host name written by setup (default: the machine name)")
     destroy = sub.add_parser("destroy", help="delete the stack, including the instance and its volume, and the local files for this machine")
     destroy.add_argument("--yes", action="store_true", help="do not ask for confirmation")
@@ -660,9 +657,12 @@ def main(argv: list[str]) -> None:
         print(f"Created {init_stack(conf['machine'], values)}")
         return
     if args.action == "layout":
-        if not args.file.is_file():
-            raise SystemExit(f"Layout file not found: {args.file}")
-        start_layout(args.alias or conf["machine"], args.file)
+        file = args.file or (args.config if args.config and args.config.suffix != ".toml" else None)
+        if not file:
+            raise SystemExit("Missing layout file; pass FILE or use --config with a layout file")
+        if not file.is_file():
+            raise SystemExit(f"Layout file not found: {file}")
+        start_layout(args.alias or conf["machine"], file)
         return
     try:
         import boto3
@@ -715,9 +715,7 @@ def main(argv: list[str]) -> None:
             write_ssh_config(bootstrap_alias, host_block(bootstrap_alias, instance, bootstrap_user, key, bootstrap_tunnel))
             target_tunnel = proxy({**conf, "ssh_user": user, "key_path": key})
             write_ssh_config(alias, host_block(alias, instance, user, key, target_tunnel))
-            if args.layout and not args.layout.is_file():
-                raise SystemExit(f"Layout file not found: {args.layout}")
-            setup_host(bootstrap_alias, alias, user, args.layout)
+            setup_host(bootstrap_alias, alias, user)
             return
         if args.action == "destroy":
             if stack(cfn, name):
