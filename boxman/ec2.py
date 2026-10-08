@@ -497,6 +497,18 @@ INSTALL_BOXMAN = (
 LAYOUT_STATE = "$HOME/.local/state/boxman"
 
 
+def send_github_token(alias: str) -> None:
+    """Put the local `gh` login's token into the host's tempkeys keyset as GH_TOKEN (replacing the whole keyset)."""
+    result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True) if shutil.which("gh") else None
+    token = result.stdout.strip() if result and result.returncode == 0 else ""
+    if not token:
+        print("`gh auth token` gave no token; not sending one (private repositories and patterns will fail)")
+        return
+    data = json.dumps({"GH_TOKEN": token}).encode()
+    subprocess.run(["ssh", "-T", alias, '"$HOME/.local/bin/boxman" secrets receive'], input=data, check=True)
+    print(f"Sent GH_TOKEN to {alias}")
+
+
 def start_layout(alias: str, layout: Path) -> None:
     """Copy a layout file (includes expanded, `ec2` map removed) to the host and start `boxman layout` detached with nohup."""
     remote_ssh(alias, f'mkdir -p "{LAYOUT_STATE}"')
@@ -621,7 +633,9 @@ def main(argv: list[str]) -> None:
         file = args.file or conf["config_path"]
         if not file.is_file():
             raise SystemExit(f"Layout file not found: {file}")
-        start_layout(args.alias or conf["machine"], file)
+        alias = args.alias or conf["machine"]
+        send_github_token(alias)
+        start_layout(alias, file)
         return
     try:
         import boto3

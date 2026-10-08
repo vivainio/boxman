@@ -218,8 +218,30 @@ class Ec2ConfigTests(unittest.TestCase):
         self.assertIn("StrictHostKeyChecking accept-new", block)
         self.assertTrue(block.endswith("ProxyCommand tunnel cmd"))
 
+    def test_send_github_token_uses_gh_auth_token(self) -> None:
+        calls = []
+        done = __import__("types").SimpleNamespace(returncode=0, stdout="tok\n")
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs.get("input")))
+            return done
+
+        with patch.object(ec2.shutil, "which", return_value="/bin/gh"), patch.object(ec2.subprocess, "run", fake_run):
+            ec2.send_github_token("red")
+        self.assertEqual(calls[0][0], ["gh", "auth", "token"])
+        self.assertEqual(calls[1], (["ssh", "-T", "red", '"$HOME/.local/bin/boxman" secrets receive'], b'{"GH_TOKEN": "tok"}'))
+
+    def test_send_github_token_skips_when_gh_gives_nothing(self) -> None:
+        failed = __import__("types").SimpleNamespace(returncode=1, stdout="")
+        with patch.object(ec2.shutil, "which", return_value=None), patch.object(ec2.subprocess, "run") as run:
+            ec2.send_github_token("red")
+        run.assert_not_called()
+        with patch.object(ec2.shutil, "which", return_value="/bin/gh"), patch.object(ec2.subprocess, "run", return_value=failed) as run:
+            ec2.send_github_token("red")
+        self.assertEqual(run.call_count, 1)
+
     def test_layout_cli_starts_layout_on_the_machine_alias(self) -> None:
-        with tempfile.TemporaryDirectory() as directory, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}), patch.object(ec2, "start_layout") as start:
+        with tempfile.TemporaryDirectory() as directory, patch.dict(ec2.os.environ, {"XDG_CONFIG_HOME": directory}), patch.object(ec2, "start_layout") as start, patch.object(ec2, "send_github_token") as send:
             layout = Path(directory) / "layout.yaml"
             layout.write_text("repos = []\n")
             (Path(directory) / "boxman").mkdir()
@@ -238,6 +260,7 @@ class Ec2ConfigTests(unittest.TestCase):
             start.reset_mock()
             ec2.main(["layout"])
             start.assert_called_once_with("red", default)
+            send.assert_called_with("red")
             with self.assertRaisesRegex(SystemExit, "not found"):
                 ec2.main(["--machine", "red", "layout", str(layout.with_name("missing.yaml"))])
 

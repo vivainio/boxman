@@ -81,8 +81,8 @@ needed; it refuses to overwrite). Global options (`--config`, `--machine`,
     boxman ec2 setup --user USER        # create the account, install boxman, tools; writes SSH config
     boxman ec2 ssh-config -u USER [--herdr]   # (re)write the SSH config entry on its own
     boxman ec2 run -u USER 'uname -a'
-    boxman ec2 secrets send ./secrets.json -u USER   # GH_TOKEN etc., before layout
-    boxman ec2 layout [FILE]            # clone the repos in the background (default: the --config file)
+    boxman ec2 secrets send ./secrets.json -u USER   # other secrets (replaces the keyset)
+    boxman ec2 layout [FILE]            # sends `gh auth token` as GH_TOKEN, then clones in the background (default: the --config file)
     boxman ec2 destroy                  # deletes instance AND volume (asks to confirm; --yes skips)
 
 After `setup` (or `ssh-config`) there is an entry in `~/.ssh/config` named after
@@ -90,9 +90,9 @@ the machine, so day-to-day use is plain `ssh red` (also `scp`, `rsync`, VS Code
 Remote). The entry tunnels through EC2 Instance Connect via boxman, so no
 `boxman ec2 ssh` is needed.
 
-`secrets.json` is a JSON object of strings, e.g. `{"GH_TOKEN":"..."}`, with mode 600. For GitHub
-use a fine-grained token (read-only Contents on the repos, authorized for SSO if needed), or
-`umask 077; printf '{"GH_TOKEN":"%s"}\n' "$(gh auth token)" > secrets.json` for a quick one.
+`ec2 layout` uploads the local `gh auth token` as `GH_TOKEN` first, replacing the host's
+secrets keyset. To keep other secrets, send a `secrets.json` (JSON object of strings, mode
+600) that includes `GH_TOKEN` yourself with `secrets send`.
 
 ## On the box itself
 

@@ -93,9 +93,12 @@ or shared; see the miniformat README for the details. Errors name the line.
 `boxman ec2 layout [FILE]` copies the layout to a host that is already set up (with
 includes expanded and the `ec2` map removed) and starts `boxman layout` there
 with `nohup`, logging to `~/.local/state/boxman/layout.log`; it returns without
-waiting for the clones. Without `FILE` it uses the `--config` layout file. Send the
-GitHub token first (`boxman ec2 secrets send`), or private repositories and patterns
-will fail.
+waiting for the clones. Without `FILE` it uses the `--config` layout file.
+
+Before cloning, `ec2 layout` sends the token from your local `gh auth token` to the
+host as `GH_TOKEN` (see [Sending secrets](ec2.md#sending-secrets)), so private
+repositories and patterns work. This replaces the host's whole secrets keyset. If `gh`
+is missing or not logged in, it says so and continues without a token.
 
 Patterns skip forks and archived repositories. Each clone gets
 `core.sharedRepository=group`. Paths that escape the clone directory are rejected.

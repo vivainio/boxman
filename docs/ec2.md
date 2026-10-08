@@ -109,19 +109,9 @@ chmod 600 secrets.json
 boxman ec2 --machine red secrets send ./secrets.json -u alice
 ```
 
-### Getting a GitHub token
+### GitHub token for cloning
 
-`boxman ec2 layout` needs `GH_TOKEN` when the layout has private repositories or patterns (`owner/prefix-*`), because patterns are expanded with `gh repo list`. Two ways to get one:
-
-- **Fine-grained personal access token (recommended).** On GitHub open Settings, Developer settings, Personal access tokens, Fine-grained tokens. Choose the organization as resource owner, select the repositories (or all of them), and grant read-only **Contents**; **Metadata** read-only is added automatically. Give it a short expiry. If the organization uses SAML single sign-on or requires approval for tokens, authorize the token there.
-- **Your `gh` login.** `gh auth token` prints the token the GitHub CLI already holds. It is quick, but the token is as powerful as your login (often `repo` scope), so prefer a fine-grained token for a shared or long-lived box.
-
-Write it straight into the secrets file without it landing in your shell history:
-
-```bash
-umask 077
-printf '{"GH_TOKEN":"%s"}\n' "$(gh auth token)" > secrets.json   # or paste the fine-grained token
-```
+`boxman ec2 layout` sends the token from your local `gh auth token` to the host as `GH_TOKEN` before it starts cloning, so you do not have to do this yourself for layouts. The token is your `gh` login's own token, so it can do whatever that login can; the box gets that access for as long as the keyset lasts (until a reboot or `tempkeys clear`). The upload replaces the whole keyset, so anything you sent earlier with `secrets send` is gone; to keep other secrets, put them in a file together with `GH_TOKEN` and use `secrets send` instead.
 
 Boxman sends the document over SSH to `boxman secrets receive` running as
 Alice. The host loads it into the default tempkeys keyset. Inside that Unix
